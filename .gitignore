@@ -9,3 +9,6 @@ playwright-report/
 .DS_Store
 .e2e-userdata/
 *.tsbuildinfo
+
+# scratch/shared images, not project code
+tmp/

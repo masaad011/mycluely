@@ -12,7 +12,7 @@ const bool = (fallback: boolean) => z.boolean().catch(fallback)
  * settings file can never crash the app or produce an unusable configuration.
  */
 export const settingsSchema = z.object({
-  version: z.literal(3).catch(3),
+  version: z.literal(4).catch(4),
   ai: z
     .object({
       provider: provider.catch(D.ai.provider),
@@ -99,6 +99,17 @@ export const settingsSchema = z.object({
       density: z.enum(['comfortable', 'compact']).catch(D.ui.density),
       corners: z.enum(['rounded', 'square']).catch(D.ui.corners),
       font: z.enum(['segoe', 'bahnschrift', 'calibri', 'cascadia']).catch(D.ui.font),
+      layout: z
+        .object({
+          leftWidth: num(0.2, 0.8, D.ui.layout.leftWidth),
+          transcriptHeight: num(0.15, 0.85, D.ui.layout.transcriptHeight),
+          historyWidth: num(220, 640, D.ui.layout.historyWidth),
+          collapsed: z
+            .object({ transcript: bool(false), screen: bool(false), assistant: bool(false) })
+            .catch(D.ui.layout.collapsed),
+          maximized: z.enum(['transcript', 'screen', 'assistant']).nullable().catch(null)
+        })
+        .catch(D.ui.layout),
       overlayAlwaysOnTop: bool(D.ui.overlayAlwaysOnTop),
       overlayOpacity: num(0.3, 1, D.ui.overlayOpacity),
       showOverlayOnStart: bool(D.ui.showOverlayOnStart),
@@ -131,7 +142,15 @@ function migrate(input: Record<string, unknown>): Record<string, unknown> {
     const assistant = out.assistant as Record<string, unknown> | undefined
     if (assistant?.suggestionCooldownSec === 30) assistant.suggestionCooldownSec = DEFAULT_SETTINGS.assistant.suggestionCooldownSec
   }
-  out.version = 3
+  if (version < 4) {
+    // v4: MyCluely windows are now hidden from screen captures by default, so sharing your screen
+    // in a meeting doesn't show the assistant to the other participants. Enable it once for
+    // existing profiles (the old default was off); you can still turn it off in Privacy.
+    const privacy: Record<string, unknown> = (out.privacy as Record<string, unknown> | undefined) ?? {}
+    privacy.hideFromCapture = true
+    out.privacy = privacy
+  }
+  out.version = 4
   return out
 }
 

@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { safe } from '../lib/actions'
 import { useStore } from '../lib/store'
 import { Modal } from './common'
+import { PaneControls } from './Panels'
 import { IconCamera, IconCrop, IconMonitor, IconX } from './icons'
 
 export function QualityBadge({ snap }: { snap: ScreenSnapshot }): ReactNode {
@@ -86,7 +87,8 @@ export function SourcePicker({ onClose }: { onClose: () => void }): ReactNode {
   )
 }
 
-export function ScreenPanel(): ReactNode {
+/** Screen context panel; `collapsed` keeps only its header (with the capture controls). */
+export function ScreenPanel({ collapsed = false, grow = false }: { collapsed?: boolean; grow?: boolean }): ReactNode {
   const screen = useStore((s) => s.status.screen)
   const snapshots = useStore((s) => s.snapshots) ?? []
   const [picking, setPicking] = useState(false)
@@ -94,7 +96,7 @@ export function ScreenPanel(): ReactNode {
   const latest = snapshots[snapshots.length - 1]
   if (!screen) return null
   return (
-    <section className="screen-panel" aria-label="Screen context">
+    <section className={`screen-panel${collapsed ? ' collapsed' : ''}${grow ? ' grow' : ''}`} aria-label="Screen context" data-testid="panel-screen">
       <div className="pane-head">
         <IconMonitor />
         <h2>Screen</h2>
@@ -134,46 +136,50 @@ export function ScreenPanel(): ReactNode {
             ))}
           </select>
         )}
+        <span className="spacer" />
+        <PaneControls id="screen" />
       </div>
-      {screen.error && (
+      {!collapsed && screen.error && (
         <div className="callout warn" style={{ margin: '8px 16px 0' }}>
           {screen.error}
         </div>
       )}
-      <div className="screen-body">
-        <div className="col">
-          <div className="screen-thumb">
-            {latest?.thumbnail ? <img src={latest.thumbnail} alt="Latest screen capture" /> : <span>No capture yet</span>}
+      {!collapsed && (
+        <div className="screen-body">
+          <div className="col">
+            <div className="screen-thumb">
+              {latest?.thumbnail ? <img src={latest.thumbnail} alt="Latest screen capture" /> : <span>No capture yet</span>}
+            </div>
+            {latest && (
+              <div className="col" style={{ gap: 4 }}>
+                <QualityBadge snap={latest} />
+                <span className="tiny muted">
+                  {latest.trigger === 'auto' ? 'Auto' : 'Manual'} · {new Date(latest.at).toLocaleTimeString()}
+                </span>
+              </div>
+            )}
           </div>
-          {latest && (
-            <div className="col" style={{ gap: 4 }}>
-              <QualityBadge snap={latest} />
-              <span className="tiny muted">
-                {latest.trigger === 'auto' ? 'Auto' : 'Manual'} · {new Date(latest.at).toLocaleTimeString()}
-              </span>
-            </div>
-          )}
+          <div className="col" style={{ minHeight: 0 }}>
+            {latest?.qualityNote && <div className="small text-warn">{latest.qualityNote}</div>}
+            {latest ? (
+              <>
+                <button className="link small" style={{ alignSelf: 'flex-start' }} onClick={() => setShowText((v) => !v)}>
+                  {showText ? 'Hide recognised text' : 'Show recognised text'}
+                </button>
+                {showText && (
+                  <div className="ocr-text" data-testid="ocr-text">
+                    {latest.quality === 'pending' ? 'Reading text…' : latest.ocrText || '(no text recognised)'}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="muted small">
+                Capture your screen to let the assistant read slides, documents, code or tables. Use <b>Explain screen</b> to capture and explain in one step.
+              </div>
+            )}
+          </div>
         </div>
-        <div className="col" style={{ minHeight: 0 }}>
-          {latest?.qualityNote && <div className="small text-warn">{latest.qualityNote}</div>}
-          {latest ? (
-            <>
-              <button className="link small" style={{ alignSelf: 'flex-start' }} onClick={() => setShowText((v) => !v)}>
-                {showText ? 'Hide recognised text' : 'Show recognised text'}
-              </button>
-              {showText && (
-                <div className="ocr-text" data-testid="ocr-text">
-                  {latest.quality === 'pending' ? 'Reading text…' : latest.ocrText || '(no text recognised)'}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="muted small">
-              Capture your screen to let the assistant read slides, documents, code or tables. Use <b>Explain screen</b> to capture and explain in one step.
-            </div>
-          )}
-        </div>
-      </div>
+      )}
       {picking && <SourcePicker onClose={() => setPicking(false)} />}
     </section>
   )

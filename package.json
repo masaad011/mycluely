@@ -1,7 +1,7 @@
 {
   "name": "mycluely",
   "productName": "MyCluely",
-  "version": "1.0.9",
+  "version": "1.0.11",
   "description": "Real-time meeting assistant: live transcription, screen understanding and AI answers from OpenAI, Anthropic, Gemini or Moonshot (Kimi).",
   "author": "MyCluely",
   "license": "MIT",

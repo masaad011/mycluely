@@ -45,7 +45,7 @@
 - **Windows only for now.** macOS is designed for but not built or tested (see the roadmap in [ARCHITECTURE.md](ARCHITECTURE.md)).
 - **The build is unsigned** (SmartScreen warning on first run) and has no auto-update.
 - **Global shortcuts can collide with other apps.** Collisions are reported, and shortcuts are configurable. The defaults use `Ctrl+Alt+Space`, `Ctrl+Alt+Enter` and `Ctrl+Alt+Shift+…`, and action shortcuts are active only during a meeting.
-- **"Hide from capture"** relies on Windows 10 2004+ display affinity; some legacy capture tools may ignore it.
+- **"Hide from screen sharing"** is on by default: MyCluely's windows are excluded from screen shares and screenshots via Windows display affinity (`WDA_EXCLUDEFROMCAPTURE`, Windows 10 2004+), so sharing your screen in a normal meeting doesn't show the assistant to other participants. It is not an anti-detection feature: some screen-recording tools, older capture APIs, and monitoring/proctoring software ignore display affinity and can still record the window, and a phone camera obviously can. Treat MyCluely as visible in any monitored or recorded setting. You can turn the setting off in *Settings → Privacy & data*.
 - **Fonts** in *Settings → Appearance* are the ones that ship with Windows; if one is missing (e.g. Cascadia on older Windows 10) the next available font is used.
 - **The UI is English-only.** There is one meeting at a time; history has no full-text search; export is Markdown or text (no PDF/DOCX).
 - **Meeting history is not encrypted.** It is plain JSON in your Windows profile, protected by your account permissions. API keys *are* encrypted.

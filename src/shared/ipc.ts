@@ -98,6 +98,8 @@ export interface InvokeMap {
   'window:show-main': { args: [view?: 'live' | 'history' | 'settings']; result: void }
   'window:hide-overlay': { args: []; result: void }
   'window:set-overlay-top': { args: [onTop: boolean]; result: void }
+  /** Collapse the panel window to its title bar (height in px), or restore it. Returns the new state. */
+  'window:overlay-collapse': { args: [collapsed: boolean, barHeight: number]; result: boolean }
   'clipboard:write': { args: [text: string]; result: void }
   'shell:open-external': { args: [url: string]; result: void }
   'region:done': { args: [rect: Rect | null]; result: void }
@@ -167,6 +169,7 @@ export const INVOKE_CHANNELS = [
   'window:show-main',
   'window:hide-overlay',
   'window:set-overlay-top',
+  'window:overlay-collapse',
   'clipboard:write',
   'shell:open-external',
   'region:done'

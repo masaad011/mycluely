@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { MeetingMode } from '@shared/types'
 import { MEETING_MODES, RESPONSE_STYLES } from '@shared/types'
 import { formatClock } from '@shared/util'
@@ -7,8 +7,11 @@ import { safe, startMeeting } from '../lib/actions'
 import { useStore } from '../lib/store'
 import { ActionGrid, AnswerModeBar, AskBox, QuestionChips, ResponseCard } from '../components/Assistant'
 import { ConsentHost, confirmConsent } from '../components/Consent'
-import { Segmented, Toasts, useElapsed } from '../components/common'
-import { IconBot, IconHistory, IconLive, IconPanel, IconPause, IconPlay, IconSettings, IconStop, IconWave } from '../components/icons'
+import { Segmented, Splitter, Toasts, useElapsed } from '../components/common'
+import { IconBot, IconHistory, IconLive, IconMonitor, IconPanel, IconPause, IconPlay, IconSettings, IconStop, IconWave } from '../components/icons'
+import { PaneControls, Rail, useLayout, useLayoutValue } from '../components/Panels'
+import type { PanelId } from '@shared/settings'
+import { DEFAULT_LAYOUT, updateLayout } from '../lib/layout'
 import { ScreenPanel } from '../components/ScreenPanel'
 import { StatusBar } from '../components/StatusBar'
 import { Transcript } from '../components/Transcript'
@@ -111,7 +114,7 @@ function AssistantPane(): ReactNode {
   const auto = useStore((s) => s.settings?.assistant.autoSuggest) === 'answers'
   const ordered = responses.slice().reverse()
   return (
-    <div className="right">
+    <div className="right" data-testid="panel-assistant">
       <div className="pane-head">
         <IconBot />
         <h2>Assistant</h2>
@@ -122,6 +125,7 @@ function AssistantPane(): ReactNode {
           options={RESPONSE_STYLES}
           onChange={(v) => void safe(() => api.invoke('settings:update', { assistant: { style: v } }))}
         />
+        <PaneControls id="assistant" />
       </div>
       <ActionGrid />
       <AnswerModeBar />
@@ -154,20 +158,97 @@ function AssistantPane(): ReactNode {
   )
 }
 
-function LiveView(): ReactNode {
+function TranscriptPane({ collapsed, style }: { collapsed: boolean; style?: CSSProperties }): ReactNode {
   const lines = useStore((s) => s.segments?.length) ?? 0
   return (
-    <div className="live">
-      <div className="left">
-        <div className="pane-head">
-          <IconWave />
-          <h2>Transcript</h2>
-          {lines > 0 && <span className="count">{lines} {lines === 1 ? 'line' : 'lines'}</span>}
-        </div>
-        <Transcript />
-        <ScreenPanel />
+    <section className={`transcript-pane${collapsed ? ' collapsed' : ''}`} style={style} aria-label="Transcript" data-testid="panel-transcript">
+      <div className="pane-head">
+        <IconWave />
+        <h2>Transcript</h2>
+        {lines > 0 && <span className="count">{lines} {lines === 1 ? 'line' : 'lines'}</span>}
+        <span className="spacer" />
+        <PaneControls id="transcript" />
       </div>
-      <AssistantPane />
+      {!collapsed && <Transcript />}
+    </section>
+  )
+}
+
+/**
+ * Live view: Transcript and Screen on the left, Assistant on the right. Panels can be resized with
+ * the drag handles, collapsed (a column whose panels are all collapsed becomes a slim rail) or
+ * expanded to fill the view. The layout is saved with the settings.
+ */
+function LiveView(): ReactNode {
+  const layout = useLayout()
+  const [left, previewLeft, commitLeft] = useLayoutValue(layout.leftWidth, (v) => updateLayout({ leftWidth: v }))
+  const [split, previewSplit, commitSplit] = useLayoutValue(layout.transcriptHeight, (v) => updateLayout({ transcriptHeight: v }))
+  const max = layout.maximized
+  const c = layout.collapsed
+  const leftRail = !max && c.transcript && c.screen
+  const rightRail = !max && c.assistant
+  const shows = (id: PanelId): boolean => !max || max === id
+
+  useEffect(() => {
+    if (!max) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !document.querySelector('.modal-backdrop')) updateLayout({ maximized: null })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [max])
+
+  const leftColumn = shows('transcript') || shows('screen')
+  const transcriptOpen = max === 'transcript' || (!max && !c.transcript)
+  const screenOpen = max === 'screen' || (!max && !c.screen)
+  return (
+    <div className={`live${max ? ' has-maximized' : ''}`} data-testid="live-layout">
+      {leftRail ? (
+        <Rail
+          side="left"
+          panels={[
+            { id: 'transcript', icon: <IconWave /> },
+            { id: 'screen', icon: <IconMonitor /> }
+          ]}
+        />
+      ) : (
+        leftColumn && (
+          <div className="left" style={max || rightRail ? { flex: '1 1 auto' } : { flexBasis: `${left * 100}%` }}>
+            {shows('transcript') && (
+              <TranscriptPane
+                collapsed={!transcriptOpen}
+                style={transcriptOpen && screenOpen ? { flex: `0 0 ${split * 100}%` } : transcriptOpen ? { flex: '1 1 auto' } : undefined}
+              />
+            )}
+            {transcriptOpen && screenOpen && (
+              <Splitter
+                orientation="horizontal"
+                label="Resize Transcript and Screen"
+                value={split}
+                min={0.15}
+                max={0.85}
+                onChange={previewSplit}
+                onCommit={commitSplit}
+                onReset={() => commitSplit(DEFAULT_LAYOUT.transcriptHeight)}
+              />
+            )}
+            {shows('screen') && <ScreenPanel collapsed={!screenOpen} grow={screenOpen} />}
+          </div>
+        )
+      )}
+      {!max && !leftRail && !rightRail && (
+        <Splitter
+          orientation="vertical"
+          label="Resize panels"
+          value={left}
+          min={0.2}
+          max={0.8}
+          onChange={previewLeft}
+          onCommit={commitLeft}
+          onReset={() => commitLeft(DEFAULT_LAYOUT.leftWidth)}
+        />
+      )}
+      {rightRail ? <Rail side="right" panels={[{ id: 'assistant', icon: <IconBot /> }]} /> : shows('assistant') && <AssistantPane />}
     </div>
   )
 }

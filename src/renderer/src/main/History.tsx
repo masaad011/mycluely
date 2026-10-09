@@ -6,7 +6,9 @@ import { api } from '../lib/api'
 import { safe } from '../lib/actions'
 import { Markdown } from '../lib/markdown'
 import { pushToast, useStore } from '../lib/store'
-import { Modal } from '../components/common'
+import { Modal, Splitter } from '../components/common'
+import { useLayout, useLayoutValue } from '../components/Panels'
+import { DEFAULT_LAYOUT, updateLayout } from '../lib/layout'
 import { IconDownload, IconHistory, IconTrash } from '../components/icons'
 
 function SummaryBlock({ m }: { m: MeetingRecord }): ReactNode {
@@ -45,6 +47,8 @@ export function HistoryView(): ReactNode {
   const [tab, setTab] = useState<'summary' | 'transcript' | 'responses'>('summary')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const saveHistory = useStore((s) => s.settings.privacy.saveHistory)
+  const layout = useLayout()
+  const [width, previewWidth, commitWidth] = useLayoutValue(layout.historyWidth, (v) => updateLayout({ historyWidth: v }))
   const session = useStore((s) => s.status.session)
 
   const load = async (): Promise<void> => {
@@ -72,7 +76,7 @@ export function HistoryView(): ReactNode {
   }
 
   return (
-    <div className="history">
+    <div className="history" style={{ gridTemplateColumns: `${width}px 1px 1fr` }}>
       <div className="history-list" aria-label="Saved meetings">
         {!saveHistory && <div className="callout small" style={{ margin: 6 }}>History is turned off in Settings → Privacy. New meetings are not saved.</div>}
         {items === null ? (
@@ -96,6 +100,17 @@ export function HistoryView(): ReactNode {
           ))
         )}
       </div>
+      <Splitter
+        orientation="vertical"
+        unit="px"
+        label="Resize the meeting list"
+        value={width}
+        min={220}
+        max={640}
+        onChange={previewWidth}
+        onCommit={(v) => commitWidth(Math.round(v))}
+        onReset={() => commitWidth(DEFAULT_LAYOUT.historyWidth)}
+      />
       <div className="history-detail">
         {!detail ? (
           <div className="empty">Select a meeting to see its summary and transcript.</div>

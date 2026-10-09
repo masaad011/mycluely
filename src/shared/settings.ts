@@ -17,8 +17,24 @@ export type ImagePolicy = 'never' | 'auto' | 'explain' | 'always'
 export type ResponseSpeed = 'fast' | 'balanced'
 import type { AccentId, Corners, Density, FontId, ThemePreference } from './themes'
 
+/** Panels of the Live view. */
+export type PanelId = 'transcript' | 'screen' | 'assistant'
+
+/** Live view layout: sizes from the drag handles, collapsed panels, and a panel expanded to fill the view. */
+export interface PanelLayout {
+  /** Width of the Transcript/Screen column as a fraction of the Live view. */
+  leftWidth: number
+  /** Height of the Transcript as a fraction of its column (the Screen panel gets the rest). */
+  transcriptHeight: number
+  /** Width of the meeting list in History, in pixels. */
+  historyWidth: number
+  collapsed: Record<PanelId, boolean>
+  /** A panel expanded to fill the Live view, or null. */
+  maximized: PanelId | null
+}
+
 export interface Settings {
-  version: 3
+  version: 4
   ai: {
     provider: ProviderId
     /** Selected model per provider so switching providers keeps each choice. */
@@ -83,7 +99,7 @@ export interface Settings {
     retentionDays: number
     keepScreenshots: boolean
     consentReminder: boolean
-    /** Exclude MyCluely windows from screenshots and screen sharing (Windows 10 2004+). */
+    /** Exclude MyCluely windows from screenshots and screen sharing via Windows display affinity (Windows 10 2004+); on by default. */
     hideFromCapture: boolean
   }
   ui: {
@@ -92,6 +108,7 @@ export interface Settings {
     density: Density
     corners: Corners
     font: FontId
+    layout: PanelLayout
     overlayAlwaysOnTop: boolean
     overlayOpacity: number
     showOverlayOnStart: boolean
@@ -128,7 +145,7 @@ export const ALWAYS_ON_SHORTCUTS: ShortcutAction[] = ['toggleOverlay']
  * provider, and any model id the provider returns can be selected (or typed manually).
  */
 export const DEFAULT_SETTINGS: Settings = {
-  version: 3,
+  version: 4,
   ai: {
     provider: 'anthropic',
     models: {
@@ -184,7 +201,7 @@ export const DEFAULT_SETTINGS: Settings = {
     retentionDays: 30,
     keepScreenshots: false,
     consentReminder: true,
-    hideFromCapture: false
+    hideFromCapture: true
   },
   ui: {
     theme: 'system',
@@ -192,6 +209,13 @@ export const DEFAULT_SETTINGS: Settings = {
     density: 'comfortable',
     corners: 'rounded',
     font: 'segoe',
+    layout: {
+      leftWidth: 0.49,
+      transcriptHeight: 0.6,
+      historyWidth: 320,
+      collapsed: { transcript: false, screen: false, assistant: false },
+      maximized: null
+    },
     overlayAlwaysOnTop: true,
     overlayOpacity: 0.96,
     showOverlayOnStart: true,
@@ -204,5 +228,5 @@ export const DEFAULT_SETTINGS: Settings = {
 export const CAPTURE_INTERVAL_CHOICES = [5, 10, 20, 30, 60, 120]
 
 export type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends Record<string, unknown> ? DeepPartial<T[K]> : T[K]
+  [K in keyof T]?: T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K]
 }

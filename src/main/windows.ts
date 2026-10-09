@@ -35,6 +35,8 @@ export class WindowManager implements Broadcaster {
   private readonly stateFile: string
   private quitting = false
   private themeWatched = false
+  /** Full height of the panel window while it is collapsed to its title bar. */
+  private overlayExpandedHeight: number | null = null
   private regionResolve: ((r: Rect | null) => void) | null = null
 
   constructor(
@@ -84,7 +86,11 @@ export class WindowManager implements Broadcaster {
     if (this.main && !this.main.isDestroyed()) {
       st.main = { ...this.main.getNormalBounds(), maximized: this.main.isMaximized() }
     }
-    if (this.overlay && !this.overlay.isDestroyed()) st.overlay = this.overlay.getBounds()
+    if (this.overlay && !this.overlay.isDestroyed()) {
+      // While collapsed to its title bar, remember the full height for next time.
+      const b = this.overlay.getBounds()
+      st.overlay = this.overlayExpandedHeight ? { ...b, height: this.overlayExpandedHeight } : b
+    }
     this.state = st
     void writeFileAtomic(this.stateFile, JSON.stringify(st)).catch(() => undefined)
   }, 800)
@@ -295,6 +301,27 @@ export class WindowManager implements Broadcaster {
     if (!this.overlay || this.overlay.isDestroyed()) return
     this.overlay.setOpacity(s.overlayOpacity)
     this.overlay.setAlwaysOnTop(s.overlayAlwaysOnTop, 'screen-saver')
+  }
+
+  /** Collapse the panel window to just its title bar (fixed size while collapsed), or restore it. */
+  setOverlayCollapsed(collapse: boolean, barHeight: number): boolean {
+    const w = this.overlay
+    if (!w || w.isDestroyed()) return false
+    const b = w.getBounds()
+    if (collapse && this.overlayExpandedHeight === null) {
+      this.overlayExpandedHeight = b.height
+      w.setMinimumSize(320, Math.round(barHeight))
+      w.setBounds({ ...b, height: Math.round(barHeight) })
+      w.setResizable(false)
+    } else if (!collapse && this.overlayExpandedHeight !== null) {
+      const height = Math.max(200, this.overlayExpandedHeight)
+      this.overlayExpandedHeight = null
+      w.setResizable(true)
+      w.setMinimumSize(320, 200)
+      w.setBounds({ ...b, height })
+    }
+    this.saveStateSoon()
+    return this.overlayExpandedHeight !== null
   }
 
   setOverlayOnTop(onTop: boolean): void {

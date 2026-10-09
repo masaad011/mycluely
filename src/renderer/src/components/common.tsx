@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { dismissToast, useStore } from '../lib/store'
 import { IconX } from './icons'
 
@@ -88,6 +88,96 @@ export function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * Drag handle between two panels. `value` is the size of the panel before the handle as a fraction
+ * of the parent (or pixels with `unit="px"`). Drag with the mouse, use the arrow keys when focused,
+ * or double-click to reset. `onChange` fires while dragging; `onCommit` once at the end.
+ */
+export function Splitter({
+  orientation,
+  value,
+  min,
+  max,
+  unit = 'fraction',
+  label,
+  onChange,
+  onCommit,
+  onReset
+}: {
+  /** `vertical`: a vertical bar between columns (drag left/right). `horizontal`: between rows. */
+  orientation: 'vertical' | 'horizontal'
+  value: number
+  min: number
+  max: number
+  unit?: 'fraction' | 'px'
+  label: string
+  onChange: (v: number) => void
+  onCommit: (v: number) => void
+  onReset?: () => void
+}): ReactNode {
+  const ref = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const clamp = (v: number): number => Math.min(max, Math.max(min, v))
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.button !== 0) return
+    const el = ref.current
+    const parent = el?.parentElement
+    if (!el || !parent) return
+    e.preventDefault()
+    el.setPointerCapture(e.pointerId)
+    const rect = parent.getBoundingClientRect()
+    const at = (ev: PointerEvent): number => {
+      const pos = orientation === 'vertical' ? ev.clientX - rect.left : ev.clientY - rect.top
+      return clamp(unit === 'px' ? pos : pos / (orientation === 'vertical' ? rect.width : rect.height))
+    }
+    let last = value
+    const move = (ev: PointerEvent): void => {
+      last = at(ev)
+      onChange(last)
+    }
+    const up = (): void => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      document.body.classList.remove('resizing', `resizing-${orientation}`)
+      setDragging(false)
+      onCommit(last)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+    document.body.classList.add('resizing', `resizing-${orientation}`)
+    setDragging(true)
+  }
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const step = (unit === 'px' ? 16 : 0.02) * (e.shiftKey ? 3 : 1)
+    const keys = orientation === 'vertical' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown']
+    if (!keys.includes(e.key)) return
+    e.preventDefault()
+    const next = clamp(value + (e.key === keys[0] ? -step : step))
+    onChange(next)
+    onCommit(next)
+  }
+  const pct = (v: number): number => Math.round(((v - min) / (max - min)) * 100)
+  return (
+    <div
+      ref={ref}
+      className={`splitter ${orientation}${dragging ? ' dragging' : ''}`}
+      role="separator"
+      aria-orientation={orientation}
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct(value)}
+      tabIndex={0}
+      title={`${label} — drag to resize, double-click to reset`}
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={onReset}
+    />
   )
 }
 

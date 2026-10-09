@@ -53,7 +53,15 @@ describe('settings', () => {
     expect(sanitizeSettings({ version: 1, ai: { imagePolicy: 'explain' } }).ai.imagePolicy).toBe('auto')
     expect(sanitizeSettings({ version: 1, ai: { imagePolicy: 'never' } }).ai.imagePolicy).toBe('never')
     expect(sanitizeSettings({ version: 2, ai: { imagePolicy: 'explain' } }).ai.imagePolicy).toBe('explain')
-    expect(sanitizeSettings({}).version).toBe(3)
+    expect(sanitizeSettings({}).version).toBe(4)
+  })
+
+  it('hides MyCluely from screen sharing by default, and turns it on once for older profiles', () => {
+    expect(sanitizeSettings({}).privacy.hideFromCapture).toBe(true)
+    // An older profile that still had it off (the previous default) is switched on by the v4 migration.
+    expect(sanitizeSettings({ version: 3, privacy: { hideFromCapture: false } }).privacy.hideFromCapture).toBe(true)
+    // A current profile's explicit choice is kept.
+    expect(sanitizeSettings({ version: 4, privacy: { hideFromCapture: false } }).privacy.hideFromCapture).toBe(false)
   })
 
   it('moves the old 30 s auto-answer cooldown to the new default but keeps other choices', () => {

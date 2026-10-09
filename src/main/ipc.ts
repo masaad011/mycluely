@@ -194,6 +194,11 @@ export function registerIpc(ctx: IpcContext): void {
   handle('window:toggle-overlay', () => windows.toggleOverlay())
   handle('window:show-main', (view) => windows.showMain(view))
   handle('window:hide-overlay', () => windows.hideOverlay())
+  handle('window:overlay-collapse', (collapsed, barHeight) => {
+    const h = Number(barHeight)
+    if (!Number.isFinite(h) || h < 24 || h > 200) throw new Error('Invalid panel height')
+    return windows.setOverlayCollapsed(!!collapsed, h)
+  })
   handle('window:set-overlay-top', (onTop) => {
     windows.setOverlayOnTop(!!onTop)
     void settings.update({ ui: { overlayAlwaysOnTop: !!onTop } })

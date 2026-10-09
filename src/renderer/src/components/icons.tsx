@@ -103,3 +103,15 @@ export const IconAlert = (p: P) => (
 export const IconWand = (p: P) => (
   <Svg {...p}><path d="m15 4 5 5M4 20l10-10M14 3v2M19 8h2M18 2l1 1M21 5l1 1" /></Svg>
 )
+export const IconChevronDown = (p: P) => (
+  <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg>
+)
+export const IconChevronUp = (p: P) => (
+  <Svg {...p}><path d="m18 15-6-6-6 6" /></Svg>
+)
+export const IconExpand = (p: P) => (
+  <Svg {...p}><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Svg>
+)
+export const IconShrink = (p: P) => (
+  <Svg {...p}><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></Svg>
+)

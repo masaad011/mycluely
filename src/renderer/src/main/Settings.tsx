@@ -868,10 +868,10 @@ function PrivacySection(): ReactNode {
         <Toggle checked={p.consentReminder} onChange={(v) => update({ privacy: { consentReminder: v } })} label="Remind me to get consent" />
       </Field>
       <Field
-        label="Hide from screen capture"
-        help="Excludes MyCluely windows from screenshots and screen sharing (Windows 10 2004+), so your notes stay private while you share your screen."
+        label="Hide from screen sharing"
+        help="On by default. When you share your screen or a window (Teams, Zoom, Meet, …), the MyCluely window and assistant panel are excluded from what the other participants see, using Windows display affinity (Windows 10 2004+). Note: some screen-recording and monitoring/proctoring tools ignore this and can still capture the window — treat it as not hidden in those settings."
       >
-        <Toggle checked={p.hideFromCapture} onChange={(v) => update({ privacy: { hideFromCapture: v } })} label="Hide MyCluely windows from captures" />
+        <Toggle checked={p.hideFromCapture} onChange={(v) => update({ privacy: { hideFromCapture: v } })} label="Hide MyCluely from screen sharing and screenshots" />
       </Field>
       <Field label="Delete data">
         <div>

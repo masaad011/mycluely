@@ -51,6 +51,7 @@ MyCluely listens to your meetings (your microphone **and** the meeting audio pla
 
 **Desktop experience**
 - Main window with live transcript, AI responses and screen context; an optional always-on-top, resizable, adjustable-opacity **assistant panel**.
+- **Flexible layout:** drag the dividers to resize the Transcript, Screen and Assistant panels (arrow keys work too; double-click a divider to reset); collapse any panel to its header — a column whose panels are all collapsed becomes a slim rail you click to bring them back; or expand one panel to fill the view (Esc restores). The History list resizes as well, and the layout is remembered. The floating panel collapses to just its title bar and flags new answers until you expand it.
 - **Appearance** (*Settings → Appearance*), applied instantly to the main window and the assistant panel:
   - **Themes:** System (follows Windows light/dark), Light, Paper (warm), Dark (graphite), Midnight (navy), Slate (soft blue-grey), Black (OLED) and High contrast — each previewed live in Settings.
   - **Accent colour:** Blue, Indigo, Violet, Teal, Green, Amber, Rose, Graphite, or your **Windows accent colour** (kept legible automatically, and updated when you change it in Windows).
