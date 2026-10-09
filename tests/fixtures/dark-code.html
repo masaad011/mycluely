@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Dark code</title>
+    <style>
+      body { margin: 0; background: #1e1e1e; color: #d4d4d4; font: 14px/1.6 Consolas, 'Cascadia Mono', monospace; display: flex; height: 100vh; }
+      nav { width: 220px; background: #252526; color: #cccccc; font: 13px/1.9 'Segoe UI', sans-serif; padding: 12px 16px; }
+      pre { margin: 0; padding: 16px 24px; }
+      .k { color: #569cd6; } .f { color: #dcdcaa; } .s { color: #ce9178; } .t { color: #4ec9b0; }
+    </style>
+  </head>
+  <body>
+    <nav>src<br />&nbsp;&nbsp;main<br />&nbsp;&nbsp;&nbsp;&nbsp;cache.ts<br />&nbsp;&nbsp;&nbsp;&nbsp;stream.ts<br />package.json<br />README.md</nav>
+    <pre><span class="k">export async function</span> <span class="f">invalidateCache</span>(event: <span class="t">ChangeEvent</span>): <span class="t">Promise</span>&lt;void&gt; {
+  <span class="k">const</span> keys = <span class="k">await</span> <span class="f">resolveKeys</span>(event.table, event.primaryKey)
+  <span class="k">for</span> (<span class="k">const</span> key <span class="k">of</span> keys) {
+    <span class="k">await</span> redis.<span class="f">del</span>(key)
+    metrics.<span class="f">increment</span>(<span class="s">"cache.invalidation"</span>, { table: event.table })
+  }
+  logger.<span class="f">info</span>(<span class="s">`evicted ${keys.length} keys for ${event.table}`</span>)
+}
+
+<span class="k">export function</span> <span class="f">subscribe</span>(stream: <span class="t">ChangeStream</span>): void {
+  stream.<span class="f">on</span>(<span class="s">"change"</span>, (event) =&gt; <span class="k">void</span> <span class="f">invalidateCache</span>(event))
+  stream.<span class="f">on</span>(<span class="s">"error"</span>, (err) =&gt; logger.<span class="f">error</span>(<span class="s">"change stream failed"</span>, err))
+}</pre>
+  </body>
+</html>

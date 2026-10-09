@@ -1,0 +1,60 @@
+{
+  "name": "mycluely",
+  "productName": "MyCluely",
+  "version": "1.0.9",
+  "description": "Real-time meeting assistant: live transcription, screen understanding and AI answers from OpenAI, Anthropic, Gemini or Moonshot (Kimi).",
+  "author": "MyCluely",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "main": "./out/main/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "predev": "node scripts/prepare-assets.mjs",
+    "dev": "electron-vite dev",
+    "prebuild": "node scripts/prepare-assets.mjs",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "icons": "node scripts/generate-icons.mjs",
+    "package": "npm run build && electron-builder --win --x64",
+    "package:dir": "npm run build && electron-builder --win --x64 --dir",
+    "fixtures": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-fixtures.ps1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
+    "@google/genai": "^2.28.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "openai": "^7.30.1",
+    "tesseract.js": "^7.0.0",
+    "undici": "7.29.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^4.3.1",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^24.19.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "jose": "^6.2.12",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.3"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

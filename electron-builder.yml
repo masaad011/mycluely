@@ -1,0 +1,50 @@
+appId: com.mycluely.app
+productName: MyCluely
+copyright: Copyright © 2026 MyCluely contributors
+directories:
+  output: release/${version}
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+  # Only the compact LSTM English model is used at runtime.
+  - '!node_modules/@tesseract.js-data/eng/4.0.0/**'
+asar: true
+# tesseract.js loads its WASM core and language data from disk inside a worker thread.
+asarUnpack:
+  - node_modules/tesseract.js/**
+  - node_modules/tesseract.js-core/**
+  - node_modules/@tesseract.js-data/**
+npmRebuild: false
+# The UI is English-only; ship just one Chromium locale pack (~45 MB smaller).
+electronLanguages:
+  - en-US
+extraMetadata:
+  main: out/main/index.js
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MyCluely
+  artifactName: ${productName}-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+# macOS is not built yet; these keys document what a future macOS build needs.
+mac:
+  icon: resources/icon.png
+  category: public.app-category.productivity
+  target: dmg
+  extendInfo:
+    NSMicrophoneUsageDescription: MyCluely transcribes your microphone during meetings you choose to capture.
+    NSAudioCaptureUsageDescription: MyCluely transcribes meeting audio playing on this Mac.

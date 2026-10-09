@@ -1,0 +1,88 @@
+Act as an expert Software Architect and Senior Full Stack Developer. Design and build a polished desktop application inspired by Cluely AI and Final Round AI that provides real-time assistance during meetings.
+
+The application should listen to meeting audio, understand the content visible on my screen, and combine both sources to provide useful text responses. It should help me answer questions, explain technical concepts, and suggest relevant questions based on the ongoing conversation.
+
+Build the application primarily for **Windows 11**, with an architecture that can support macOS later.
+
+**1. Capture and understand meeting audio**
+
+- Let me select the meeting audio source, including system audio and my microphone.
+- Support meetings conducted through applications such as Microsoft Teams, Zoom, and Google Meet using supported operating-system capture capabilities.
+- Transcribe the conversation continuously and distinguish speakers where technically possible.
+- Maintain context throughout the meeting so answers reflect earlier discussion.
+- Provide clear controls to start, pause, resume, and stop capture.
+
+**2. Read and understand screen content**
+
+- Let me select an entire screen, a specific application window, or a screen region.
+- Analyze visible text, presentation slides, documents, browser pages, code, tables, and diagrams using OCR and vision-capable AI models.
+- Support manual screenshots and configurable automatic capture.
+- Combine screen content with the transcript to understand what participants are discussing.
+- Clearly indicate when screen content is unclear, incomplete, or unreadable.
+
+**3. Provide live AI assistance**
+
+Display responses as text in a clean, adjustable desktop panel. Include actions such as:
+
+- **Answer the latest question:** Draft a natural, concise response based on the conversation and screen content.
+- **Suggest a question:** Recommend useful follow-up or clarification questions.
+- **Explain this screen:** Explain the selected screen content.
+- **Summarize the discussion:** Identify key points, decisions, and open questions.
+- **Ask anything:** Let me type a custom question about the meeting.
+
+Allow me to choose short, detailed, technical, or conversational responses. Stream answers as they are generated and let me regenerate or refine them.
+
+The assistant should recognize unanswered questions without interrupting me with excessive suggestions. Responses should remain grounded in the available context and clearly identify uncertainty.
+
+**4. Let me choose the AI provider and model**
+
+Support these providers through their official APIs:
+
+- **OpenAI:** Models available through the OpenAI API.
+- **Anthropic:** Claude models.
+- **Moonshot AI:** Kimi models.
+- **Google:** Gemini models.
+
+Provide a settings screen where I can securely configure credentials, select a provider and model, and test the connection. Let me switch models between meetings or during a meeting while preserving relevant context.
+
+Verify current model availability and capabilities using official documentation during implementation. Avoid hardcoding outdated model names. Account for differences in audio, vision, streaming, and context support, and provide appropriate transcription or OCR processing when a selected model requires it.
+
+Explain API setup and billing requirements in the documentation.
+
+**5. Create a practical desktop experience**
+
+Include:
+
+- An optional always-on-top, resizable assistance panel.
+- A main window with the live transcript, AI responses, and captured screen context.
+- Visible audio and screen capture status.
+- Keyboard shortcuts for common actions.
+- Meeting modes such as technical discussion, standup, client meeting, and general meeting.
+- Controls for response length, automatic suggestions, capture frequency, and model selection.
+- Optional meeting history with summaries, action items, and text or Markdown export.
+
+Prioritize readability, responsiveness, and reliable operation during long meetings.
+
+**6. Design the architecture carefully**
+
+Choose and justify a suitable technology stack for the desktop interface, native audio and screen capture, transcription, AI integration, and local persistence.
+
+Separate these components so they can be maintained independently. Use secure operating-system credential storage, configurable retention settings, and clear permission controls.
+
+Handle connection failures, API limits, unsupported model capabilities, device changes, and capture failures gracefully. Keep the interface responsive while processing audio, images, and model responses.
+
+**7. Implement and deliver a working application**
+
+Begin with a concise architecture proposal and implementation plan, then proceed with development using sensible defaults.
+
+Deliver:
+
+- Complete source code with a clear project structure.
+- A working application with functional audio capture, screen capture, transcription, and AI responses.
+- Provider configuration and model selection.
+- Installation, configuration, and build instructions.
+- A packaged Windows build or reproducible packaging steps.
+- Relevant tests and verification of the core meeting workflow.
+- Clear documentation of any remaining limitations.
+
+Prioritize a complete, usable first version. Do not stop at a design document, UI mockup, or placeholder implementation. If credentials are unavailable, implement the integrations and configuration flow, and clearly identify which features require credentials to verify.
