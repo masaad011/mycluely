@@ -94,6 +94,56 @@ describe('transcription service', () => {
     expect((await t.svc.resolveEngine()).engine).toBe('openai')
   })
 
+  it('in auto mode, transcribes a part on-device when the cloud engine keeps timing out, without switching for good', async () => {
+    const t = setup({
+      engine: 'auto',
+      configured: ['gemini'],
+      stt: async (_req, call) => {
+        if (call <= 2) throw new ProviderError('gemini', 'timeout', 'Transcription took longer than 45 s')
+        return 'cloud again'
+      }
+    })
+    const out = await t.svc.enqueue(job(1))
+    expect(out.result?.text).toBe('local text')
+    expect(t.requests).toHaveLength(2) // a timeout is retried once, not twice
+    expect(t.localCalls()).toBe(1)
+    await expect.poll(() => t.statuses.at(-1)?.ok).toBe(true) // status updates are published asynchronously
+    expect(t.notices).toEqual([])
+    // The next part goes to the cloud engine again.
+    expect((await t.svc.enqueue(job(2))).result?.text).toBe('cloud again')
+  })
+
+  it('in auto mode, falls back for a part after repeated 503s, and reports the cloud error if Whisper fails too', async () => {
+    const t = setup({
+      engine: 'auto',
+      configured: ['gemini'],
+      stt: async () => {
+        throw new ProviderError('gemini', 'server', 'overloaded', 503, 1)
+      },
+      local: async () => {
+        throw new Error('model unavailable')
+      }
+    })
+    const out = await t.svc.enqueue(job(1))
+    expect(t.requests).toHaveLength(3)
+    expect(t.localCalls()).toBe(1)
+    expect(out.error).toMatch(/Google Gemini: the service is temporarily unavailable \(503\)/)
+  })
+
+  it('does not fall back for transient errors of an explicitly chosen engine', async () => {
+    const t = setup({
+      engine: 'gemini',
+      configured: ['gemini'],
+      stt: async () => {
+        throw new ProviderError('gemini', 'timeout', 'slow')
+      }
+    })
+    const out = await t.svc.enqueue(job(1))
+    expect(out.error).toMatch(/timed out/)
+    expect(t.requests).toHaveLength(3)
+    expect(t.localCalls()).toBe(0)
+  })
+
   it('reports permanent errors for an explicitly chosen engine without falling back', async () => {
     const t = setup({
       engine: 'openai',

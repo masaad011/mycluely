@@ -24,6 +24,7 @@ MyCluely listens to your meetings (your microphone **and** the meeting audio pla
 - Captures your microphone ("You") and Windows system audio ("Remote") — works with Teams, Zoom, Google Meet, Webex or anything else that plays through your PC.
 - Continuous transcription with voice-activity segmentation. Engines: **on-device Whisper** (free, private, runs on your GPU via WebGPU or CPU), **OpenAI** (`gpt-transcribe`, optional speaker separation with `gpt-4o-transcribe-diarize`) or **Gemini**.
 - Speaker labels by channel (You / Remote, optionally Remote A / B), echo suppression when you use speakers, filtering of speech-to-text hallucinations.
+- **Choose your microphone** in *Settings → Audio capture*: the Windows default, the Windows communications device (often your headset), or a specific microphone — and **Test** it with a live level meter before the meeting. Settings also shows which playback device the meeting audio is recorded from.
 - Start / pause / resume / stop, live level meters, automatic recovery when a device is unplugged.
 
 **Screen understanding**
@@ -35,6 +36,7 @@ MyCluely listens to your meetings (your microphone **and** the meeting audio pla
 - **Answer the latest question**, **Questions to ask**, **Explain this screen**, **Summarize the discussion**, **Ask anything**.
 - **Questions to ask** writes three specific questions you could ask the other participants, based on what was said (and the screen): to clarify, move things forward or surface risks and owners. Each has a one-click copy button; **More questions** gives new ones without repeating earlier suggestions.
 - Short, detailed, technical or conversational answers; streamed as they are generated; **Stop**, **Regenerate** and **Refine** (shorter, more detail, simpler, more formal, or your own instruction).
+- **Easy to read at a glance:** every response card is labelled and colour-coded by type (Answer, Answer from screen, Questions to ask, Screen explained, Summary), with the question it answers — who asked it, or what you typed — shown above the answer. Code appears in a monospace block with **syntax highlighting** (20+ languages), a language label and a Copy button; tables, quotes and links are formatted. In the transcript, speakers are colour-coded, consecutive lines are grouped, and detected questions are tagged *Question* / *Answered*. All colours keep at least 4.5:1 contrast in every theme.
 - **Built for speed:** *Response speed → Fastest* (the default) has the model answer without extended thinking and sends screenshots only for *Explain this screen*; connections to the AI provider stay open between answers and are opened ahead of time when a meeting starts or a question is asked; model details never hold up a request. Each answer card shows how long it took to start (hover for the full time).
 - **Answer mode: Manual or Auto** (in the Assistant pane and the floating panel).
   - **Manual:** nothing is answered until you click **Answer** or press the shortcut. *Answer* answers the question just asked aloud; if none was, it takes a fresh look at the screen and answers the most recent question — spoken or shown.
@@ -67,7 +69,7 @@ MyCluely listens to your meetings (your microphone **and** the meeting audio pla
 3. Pick the provider/model under **Settings → AI model** (or from the status bar at any time).
 4. Join your meeting, click **Start** in MyCluely, and use the buttons or shortcuts.
 
-Windows will ask once for microphone access. If the mic stays silent, enable *Settings → Privacy & security → Microphone → Let desktop apps access your microphone*.
+Windows will ask once for microphone access. To pick the microphone (for example your headset), open **Settings → Audio capture → Input device** and click **Test** — the bar moves when the microphone hears you. If it stays silent, enable *Windows Settings → Privacy & security → Microphone → Let desktop apps access your microphone*.
 
 ## Keyboard shortcuts
 
@@ -149,4 +151,4 @@ scripts/       icon generation, fixture generation
 
 ## Privacy
 
-Audio is processed in memory and discarded after transcription; nothing is recorded to disk. Transcripts, OCR text and (when allowed) screenshots are sent only to the provider you selected, only when transcription or an assistant action needs them; OpenAI requests use `store: false`. Meeting history is local (`%APPDATA%\MyCluely\meetings`), can be disabled, and is deleted after the retention period you choose. A consent reminder is shown before capture starts — make sure participants know the meeting is being transcribed.
+Audio is processed in memory and discarded after transcription; nothing is recorded to disk. Transcripts, OCR text and (when allowed) screenshots are sent only to the provider you selected, only when transcription or an assistant action needs them; OpenAI requests use `store: false`. Meeting history is local (`%APPDATA%\MyCluely\meetings` by default; pick another folder in Settings → Privacy & data → Meetings folder, which moves the saved meetings there), can be disabled, and is deleted after the retention period you choose. A consent reminder is shown before capture starts — make sure participants know the meeting is being transcribed.

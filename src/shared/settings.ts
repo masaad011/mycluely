@@ -101,6 +101,8 @@ export interface Settings {
     consentReminder: boolean
     /** Exclude MyCluely windows from screenshots and screen sharing via Windows display affinity (Windows 10 2004+); on by default. */
     hideFromCapture: boolean
+    /** Folder for saved meetings and the live meeting's temporary files; '' = `meetings` in the app's data folder. Changed only through `history:move-folder`. */
+    meetingsDir: string
   }
   ui: {
     theme: ThemePreference
@@ -201,7 +203,8 @@ export const DEFAULT_SETTINGS: Settings = {
     retentionDays: 30,
     keepScreenshots: false,
     consentReminder: true,
-    hideFromCapture: true
+    hideFromCapture: true,
+    meetingsDir: ''
   },
   ui: {
     theme: 'system',

@@ -218,30 +218,71 @@ function QuestionList({ items }: { items: SuggestedQuestion[] }): ReactNode {
   )
 }
 
-export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: AssistantResponse; compact?: boolean }): ReactNode {
+type Tone = 'answer' | 'ask' | 'suggest' | 'screen' | 'summary'
+
+/** How each kind of response is labelled and coloured (tones map to --t-* colours in app.css). */
+const CARD_TYPES: Record<Exclude<AssistantAction, 'refine'>, { tone: Tone; label: string; icon: (p: object) => ReactNode }> = {
+  answer: { tone: 'answer', label: 'Answer', icon: IconAnswer },
+  'screen-answer': { tone: 'answer', label: 'Answer from screen', icon: IconScreenExplain },
+  ask: { tone: 'ask', label: 'Answer', icon: IconAnswer },
+  suggest: { tone: 'suggest', label: 'Questions to ask', icon: IconQuestion },
+  'explain-screen': { tone: 'screen', label: 'Screen explained', icon: IconScreenExplain },
+  summarize: { tone: 'summary', label: 'Summary', icon: IconSummary }
+}
+
+/** Overrides for responses shown outside the live meeting (History). */
+export interface CardContext {
+  question?: Pick<DetectedQuestion, 'text' | 'speaker'>
+  parentAction?: AssistantAction
+  /** Replaces the clock time, e.g. the time into the meeting. */
+  timeLabel?: string
+}
+
+export const ResponseCard = memo(function ResponseCard({
+  r,
+  compact,
+  readOnly,
+  context
+}: {
+  r: AssistantResponse
+  compact?: boolean
+  /** History: no actions (stop, regenerate, refine). */
+  readOnly?: boolean
+  context?: CardContext
+}): ReactNode {
   const [refining, setRefining] = useState(false)
   const [custom, setCustom] = useState('')
   const streaming = r.status === 'streaming'
-  const question = useStore((s) => (r.questionId ? s.questions.find((q) => q.id === r.questionId)?.text : undefined))
+  const liveQuestion = useStore((s) => (r.questionId ? s.questions.find((q) => q.id === r.questionId) : undefined))
+  const liveParent = useStore((s) => (r.parentId ? s.responses.find((x) => x.id === r.parentId)?.action : undefined))
+  const question = context?.question ?? liveQuestion
+  const parentAction = context?.parentAction ?? liveParent
   // Suggested questions (and refinements of them) are shown as a list of copyable questions.
-  const parentAction = useStore((s) => (r.parentId ? s.responses.find((x) => x.id === r.parentId)?.action : undefined))
   const questionList = r.action === 'suggest' || (r.action === 'refine' && parentAction === 'suggest')
   const items = questionList && r.status !== 'error' ? parseSuggestedQuestions(r.text) : []
-  const title =
-    r.action === 'ask' && r.prompt
-      ? `“${r.prompt}”`
-      : r.action === 'refine'
-        ? `Refined: ${r.prompt ?? ''}`
-        : r.action === 'answer' && question
-          ? `Answer: “${question}”`
-          : ACTION_LABELS[r.action]
+  // A refinement keeps the look of what it refines.
+  const base = r.action === 'refine' ? CARD_TYPES[parentAction && parentAction !== 'refine' ? parentAction : 'answer'] : CARD_TYPES[r.action]
+  const label = r.action === 'refine' ? `${base.label} · refined` : base.label
+  const TypeIcon = base.icon
+  // What the response is about: the question asked aloud, your typed question, or the change asked for.
+  const prompt =
+    r.action === 'refine' && r.prompt
+      ? { kind: 'change', label: 'Change', text: r.prompt }
+      : r.action === 'ask' && r.prompt
+        ? { kind: 'ask', label: 'You asked', text: r.prompt }
+        : (r.action === 'answer' || r.action === 'screen-answer') && question
+          ? { kind: 'question', label: question.speaker ? `${question.speaker} asked` : 'Question', text: question.text }
+          : null
+  const time = context?.timeLabel ?? new Date(r.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   return (
-    <article className={`resp ${r.status}`} data-testid="response" data-status={r.status}>
+    <article className={`resp ${r.status}`} data-tone={base.tone} data-testid="response" data-status={r.status}>
       <div className="resp-head">
-        <span className="kind ellipsis grow" title={title}>
-          {r.auto && <span className="badge accent" style={{ marginRight: 6 }}>auto</span>}
-          {title}
+        <span className="resp-type" data-testid="response-type">
+          <TypeIcon />
+          {label}
         </span>
+        {r.auto && <span className="badge accent">auto</span>}
+        <span className="spacer" />
         <span
           className="meta ellipsis"
           title={[
@@ -255,11 +296,23 @@ export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: Assi
         >
           {!compact && `${r.model} · `}
           {r.firstTokenMs !== undefined && `${seconds(r.firstTokenMs)} · `}
-          {new Date(r.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+          {time}
         </span>
       </div>
+      {prompt && (
+        <div className={`resp-prompt ${prompt.kind}`} data-testid="response-prompt">
+          <span className="rp-label">{prompt.label}</span>
+          <span className="rp-text">{prompt.text}</span>
+        </div>
+      )}
       <div className={`resp-body${streaming ? ' typing' : ''}`}>
-        {items.length ? <QuestionList items={items} /> : r.text ? <Markdown text={r.text} /> : streaming ? <span className="muted">Thinking…</span> : null}
+        {items.length ? (
+          <QuestionList items={items} />
+        ) : r.text ? (
+          <Markdown text={r.text} onCopyCode={(code) => void copyText(code)} />
+        ) : streaming ? (
+          <span className="thinking">Thinking</span>
+        ) : null}
         {r.status === 'error' && (
           <div className="row resp-error">
             <IconAlert style={{ flex: 'none', marginTop: 3 }} />
@@ -279,7 +332,7 @@ export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: Assi
         </div>
       )}
       <div className="resp-foot">
-        {streaming ? (
+        {streaming && !readOnly ? (
           <button key="stop" className="btn sm" onClick={() => void safe(() => api.invoke('assistant:cancel', r.id))}>
             <IconStop /> Stop
           </button>
@@ -295,7 +348,7 @@ export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: Assi
             >
               <IconCopy /> {!compact && (items.length ? 'Copy all' : 'Copy')}
             </button>
-            {r.action === 'suggest' ? (
+            {readOnly ? null : r.action === 'suggest' ? (
               <button className="btn ghost sm" onClick={() => void runAction('suggest')} title="Suggest different questions" data-testid="more-questions">
                 <IconRefresh /> More questions
               </button>
@@ -304,7 +357,7 @@ export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: Assi
                 <IconRefresh /> {!compact && 'Regenerate'}
               </button>
             )}
-            {r.status === 'done' && (
+            {!readOnly && r.status === 'done' && (
               <button className="btn ghost sm" onClick={() => setRefining((v) => !v)} title="Refine">
                 <IconWand /> Refine
               </button>
@@ -312,7 +365,7 @@ export const ResponseCard = memo(function ResponseCard({ r, compact }: { r: Assi
           </>
         )}
       </div>
-      {refining && !streaming && (
+      {refining && !streaming && !readOnly && (
         <div className="col" style={{ marginTop: 8 }}>
           <div className="row wrap">
             {REFINEMENTS.map((x) => (

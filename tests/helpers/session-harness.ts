@@ -135,7 +135,6 @@ export async function createHarness(
     screens: new FakeScreens(),
     ocr,
     broadcaster: events,
-    cacheDir: path.join(dir, 'session-cache'),
     // Screen watching at test speed.
     watcherTimings: { probeMs: 100, settleMs: 150, rereadMs: 600 },
     onAutoAnswer: opts.onAutoAnswer

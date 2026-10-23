@@ -161,7 +161,7 @@ describe('core meeting workflow (headless)', () => {
     expect(saved?.snapshots[0].ocrText).toContain('Quarterly Revenue Review')
     // Screenshots are not retained by default.
     expect(saved?.snapshots[0].imagePath).toBeUndefined()
-    await expect(readdir(path.join(dir, 'session-cache', id))).rejects.toThrow()
+    await expect(readdir(path.join(dir, 'meetings', '.session-cache', id))).rejects.toThrow()
     const md = meetingToMarkdown(saved!, { includeScreens: true })
     expect(md).toContain('## Summary')
     expect(md).toContain('Quarterly Revenue Review')

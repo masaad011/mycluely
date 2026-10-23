@@ -9,7 +9,7 @@ import type {
   LocalSttRequest,
   LocalSttResult
 } from '@shared/ipc'
-import type { AudioDevice, AudioLevels } from '@shared/types'
+import type { AudioDevice, AudioLevels, MicTestStatus } from '@shared/types'
 import { newId } from '@shared/util'
 import type { CaptureDriver } from './session/ports'
 import type { WindowManager } from './windows'
@@ -21,6 +21,7 @@ export interface CaptureHandlers {
   levels(levels: AudioLevels): void
   channel(msg: ChannelStatusMessage): void
   devices(devices: AudioDevice[]): void
+  micTest(status: MicTestStatus): void
   sttProgress(p: LocalSttProgress): void
   log(level: string, message: string): void
 }
@@ -57,6 +58,9 @@ export class ElectronCaptureDriver implements CaptureDriver {
     on<AudioLevels>('capture:levels', (l) => this.handlers.levels(l))
     on<ChannelStatusMessage>('capture:channel', (m) => this.handlers.channel(m))
     on<AudioDevice[]>('capture:devices', (d) => this.handlers.devices(Array.isArray(d) ? d : []))
+    on<MicTestStatus>('capture:mic-test', (m) => {
+      if (m && typeof m.level === 'number') this.handlers.micTest(m)
+    })
     on<GrabResult>('capture:grab-result', (r) => {
       const p = this.grabs.get(r?.requestId)
       if (!p) return
@@ -86,7 +90,7 @@ export class ElectronCaptureDriver implements CaptureDriver {
       replay.push(this.desired.start)
       if (this.desired.paused) replay.push({ type: 'pause' })
     }
-    const queued = this.queue.filter((c) => c.type !== 'start' && c.type !== 'pause' && c.type !== 'resume' && c.type !== 'stop')
+    const queued = this.queue.filter((c) => c.type !== 'start' && c.type !== 'pause' && c.type !== 'resume' && c.type !== 'stop' && c.type !== 'mic-test')
     this.queue = []
     for (const c of [...replay, ...queued, { type: 'refresh-devices' } as CaptureCommand]) this.post(c)
   }
@@ -101,6 +105,7 @@ export class ElectronCaptureDriver implements CaptureDriver {
     this.grabs.clear()
     for (const p of this.stt.values()) p.reject(new Error('Capture engine restarted'))
     this.stt.clear()
+    this.handlers.micTest({ active: false, level: 0 })
   }
 
   private post(cmd: CaptureCommand): void {

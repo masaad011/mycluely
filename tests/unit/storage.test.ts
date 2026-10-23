@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import { meetingToMarkdown, meetingToText } from '@shared/export'
-import type { MeetingRecord, TranscriptSegment } from '@shared/types'
+import type { MeetingRecord, ScreenSnapshot, TranscriptSegment } from '@shared/types'
 import { CredentialStore, type Encryptor } from '../../src/main/services/credential-store'
 import { MeetingStore } from '../../src/main/services/meeting-store'
 import { sanitizeSettings } from '../../src/main/services/settings-schema'
@@ -188,6 +188,45 @@ describe('meeting store', () => {
     expect(await store.applyRetention(0, now)).toBe(0)
     await store.delete(m.id)
     expect(await store.list()).toEqual([])
+  })
+
+  it('moves saved meetings to a new folder, keeping later writes and screenshot paths', async () => {
+    const store = new MeetingStore(path.join(dir, 'meetings'))
+    const m = record('2026-10-01_abc', Date.now())
+    await store.save(m)
+    await store.appendSegment(m.id, seg('s1', 'first', 1000))
+    await mkdir(store.screensDir(m.id), { recursive: true })
+    await writeFile(path.join(store.screensDir(m.id), 'shot.jpg'), 'jpg')
+    await store.save({ ...m, snapshots: [{ id: 'shot', at: 1, imagePath: path.join(store.screensDir(m.id), 'shot.jpg') } as ScreenSnapshot] })
+    await mkdir(path.join(store.cacheDir, 'live'), { recursive: true })
+
+    const next = path.join(dir, 'project', 'meetings')
+    const pending = store.appendSegment(m.id, seg('s2', 'queued before the move', 2000))
+    expect(await store.relocate(next)).toEqual({ moved: 1, left: 0 })
+    await pending
+    await store.appendSegment(m.id, seg('s3', 'after the move', 3000))
+
+    expect(store.root).toBe(next)
+    expect(store.cacheDir).toBe(path.join(next, '.session-cache'))
+    const loaded = await store.get(m.id)
+    expect(loaded?.segments.map((s) => s.text)).toEqual(['first', 'queued before the move', 'after the move'])
+    expect(loaded?.snapshots[0]?.imagePath).toBe(path.join(next, m.id, 'screens', 'shot.jpg'))
+    expect(await readFile(loaded!.snapshots[0]!.imagePath!, 'utf8')).toBe('jpg')
+    // The old folder held only meetings and the session cache, so it is gone.
+    await expect(stat(path.join(dir, 'meetings'))).rejects.toThrow()
+    await expect(store.relocate(path.join(next, m.id, 'sub'))).rejects.toThrow(/outside the saved meetings/)
+  })
+
+  it('delete-all removes only meeting folders from a user-chosen folder', async () => {
+    const root = path.join(dir, 'chosen')
+    await mkdir(root, { recursive: true })
+    await writeFile(path.join(root, 'notes.txt'), 'keep me')
+    await mkdir(path.join(root, 'other.stuff'))
+    const store = new MeetingStore(root)
+    await store.save(record('2026-10-01_abc', Date.now()))
+    await store.deleteAll()
+    expect(await store.list()).toEqual([])
+    expect((await readdir(root)).sort()).toEqual(['notes.txt', 'other.stuff'])
   })
 
   it('rejects path-traversal ids', async () => {

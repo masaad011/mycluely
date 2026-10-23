@@ -14,6 +14,7 @@ import type {
   MeetingRecord,
   MeetingRecordMeta,
   MeetingSummary,
+  MicTestStatus,
   ModelInfo,
   ProviderId,
   ProviderTestResult,
@@ -94,6 +95,9 @@ export interface InvokeMap {
   'history:delete': { args: [id: string]; result: void }
   'history:delete-all': { args: []; result: void }
   'history:export': { args: [id: string, format: 'md' | 'txt']; result: string | null }
+  /** Pick a new meetings folder (or go back to the default) and move the saved meetings there. Not while a meeting is running. */
+  'history:move-folder': { args: [target: 'choose' | 'default']; result: { dir: string; moved: number; left: number } | null }
+  'history:open-folder': { args: []; result: void }
   'window:toggle-overlay': { args: []; result: void }
   'window:show-main': { args: [view?: 'live' | 'history' | 'settings']; result: void }
   'window:hide-overlay': { args: []; result: void }
@@ -102,6 +106,10 @@ export interface InvokeMap {
   'window:overlay-collapse': { args: [collapsed: boolean, barHeight: number]; result: boolean }
   'clipboard:write': { args: [text: string]; result: void }
   'shell:open-external': { args: [url: string]; result: void }
+  /** Start (with the device to test) or stop the microphone test. Not while a meeting is running. */
+  'audio:test-mic': { args: [on: boolean, deviceId?: string]; result: void }
+  /** Open the OS sound settings (Windows: Settings → System → Sound). */
+  'system:open-sound-settings': { args: []; result: void }
   'region:done': { args: [rect: Rect | null]; result: void }
 }
 
@@ -119,6 +127,7 @@ export interface EventMap {
   settings: Settings
   credentials: Record<ProviderId, CredentialStatus>
   devices: AudioDevice[]
+  'mic-test': MicTestStatus
   'session-reset': AppSnapshot
   'focus-ask': null
   navigate: 'live' | 'history' | 'settings'
@@ -165,6 +174,8 @@ export const INVOKE_CHANNELS = [
   'history:delete',
   'history:delete-all',
   'history:export',
+  'history:move-folder',
+  'history:open-folder',
   'window:toggle-overlay',
   'window:show-main',
   'window:hide-overlay',
@@ -172,6 +183,8 @@ export const INVOKE_CHANNELS = [
   'window:overlay-collapse',
   'clipboard:write',
   'shell:open-external',
+  'audio:test-mic',
+  'system:open-sound-settings',
   'region:done'
 ] as const satisfies readonly InvokeChannel[]
 
@@ -188,6 +201,7 @@ export const EVENT_CHANNELS = [
   'settings',
   'credentials',
   'devices',
+  'mic-test',
   'session-reset',
   'focus-ask',
   'navigate',
@@ -214,6 +228,8 @@ export type CaptureCommand =
   | { type: 'stop' }
   | { type: 'configure'; audio: AudioCaptureConfig }
   | { type: 'refresh-devices' }
+  | { type: 'mic-test'; deviceId: string }
+  | { type: 'mic-test-stop' }
 
 export interface GrabRequest {
   requestId: string
@@ -288,6 +304,7 @@ export const CAPTURE_SEND_CHANNELS = [
   'capture:levels',
   'capture:channel',
   'capture:devices',
+  'capture:mic-test',
   'capture:grab-result',
   'capture:ready',
   'local-stt:result',

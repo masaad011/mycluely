@@ -4,20 +4,46 @@ import { formatClock } from '@shared/util'
 import { useStore } from '../lib/store'
 import { IconWave } from './icons'
 
-const Segment = memo(function Segment({ seg, isQuestion }: { seg: TranscriptSegment; isQuestion: boolean }): ReactNode {
-  const cls = ['seg', isQuestion ? 'question' : '', seg.status === 'failed' ? 'failed' : ''].filter(Boolean).join(' ')
+/**
+ * One transcript line. Consecutive lines from the same speaker are grouped (the name is shown on
+ * the first), and lines where a question was detected are tagged as open or answered.
+ */
+export const SegmentRow = memo(function SegmentRow({
+  seg,
+  continued,
+  question
+}: {
+  seg: TranscriptSegment
+  /** Same speaker as the line before: the name is not repeated. */
+  continued?: boolean
+  question?: 'open' | 'answered'
+}): ReactNode {
+  const tone = seg.source === 'mic' ? 'you' : 'remote'
+  const cls = ['seg', continued ? 'continued' : '', question ? `question ${question}` : '', seg.status === 'failed' ? 'failed' : '']
+    .filter(Boolean)
+    .join(' ')
   return (
-    <div className={cls} data-testid="segment">
+    <div className={cls} data-testid="segment" data-speaker={tone}>
       <div className="time">{formatClock(seg.startMs)}</div>
-      <div className={`who ${seg.source === 'mic' ? 'you' : 'remote'}`} title={seg.speaker}>
-        {seg.speaker}
+      <div className={`who ${tone}`} title={seg.speaker}>
+        {continued ? <span className="sr-only">{seg.speaker}</span> : seg.speaker}
       </div>
       <div className="text">
         {seg.status === 'failed' ? `Couldn't transcribe this part${seg.error ? ` — ${seg.error}` : ''}` : seg.text}
+        {question && (
+          <span className={`q-tag ${question}`} data-testid="question-tag">
+            {question === 'open' ? 'Question' : 'Answered'}
+          </span>
+        )}
       </div>
     </div>
   )
 })
+
+/** Whether `seg` continues the previous line's speaker (shown without repeating the name). */
+export function continuesSpeaker(prev: TranscriptSegment | undefined, seg: TranscriptSegment): boolean {
+  return !!prev && prev.speaker === seg.speaker && prev.status === 'ok' && seg.startMs - prev.startMs < 60_000
+}
 
 export function Transcript(): ReactNode {
   const segments = useStore((s) => s.segments) ?? []
@@ -25,7 +51,7 @@ export function Transcript(): ReactNode {
   const session = useStore((s) => s.status.session)
   const ref = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
-  const questionSegs = new Set(questions.filter((q) => q.status !== 'dismissed').map((q) => q.segmentId))
+  const questionSegs = new Map(questions.filter((q) => q.status !== 'dismissed').map((q) => [q.segmentId, q.status === 'open' ? 'open' : 'answered'] as const))
 
   useLayoutEffect(() => {
     if (stick && ref.current) ref.current.scrollTop = ref.current.scrollHeight
@@ -63,8 +89,8 @@ export function Transcript(): ReactNode {
   }
   return (
     <div className="transcript" ref={ref} data-testid="transcript">
-      {segments.map((s) => (
-        <Segment key={s.id} seg={s} isQuestion={questionSegs.has(s.id)} />
+      {segments.map((s, i) => (
+        <SegmentRow key={s.id} seg={s} continued={continuesSpeaker(segments[i - 1], s)} question={questionSegs.get(s.id)} />
       ))}
       {!stick && (
         <button

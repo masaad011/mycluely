@@ -2,6 +2,7 @@
 
 ## Audio and transcription
 
+- **System audio comes from the Windows default playback device.** You can choose the microphone, but not which speaker/headset is recorded: Windows loopback capture in Electron always records the default playback device. If your meeting app plays through a different device (for example a headset set as the Windows *communications* device), the other participants are not heard. Make that device the Windows default, or pick the default device as the speaker in the meeting app. *Settings → Audio capture* shows the device being recorded, warns when Windows uses a different one for calls, and opens Windows sound settings. Recording a chosen output device would need native WASAPI code.
 - **System audio is system-wide.** Windows loopback capture records everything your PC plays (meeting app, notifications, music), not a single app. Mute other media during meetings. Per-app capture would need the native WASAPI process-loopback API, which is not available in Electron today.
 - **Speaker identification is per channel:**
   - "You" means your microphone; "Remote" means everyone else.

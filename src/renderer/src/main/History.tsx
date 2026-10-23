@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { MeetingRecord, MeetingRecordMeta } from '@shared/types'
-import { ACTION_LABELS, MEETING_MODES } from '@shared/types'
+import { MEETING_MODES } from '@shared/types'
 import { formatClock, formatDuration } from '@shared/util'
 import { api } from '../lib/api'
 import { safe } from '../lib/actions'
-import { Markdown } from '../lib/markdown'
+import { ResponseCard } from '../components/Assistant'
+import { continuesSpeaker, SegmentRow } from '../components/Transcript'
 import { pushToast, useStore } from '../lib/store'
 import { Modal, Splitter } from '../components/common'
 import { useLayout, useLayoutValue } from '../components/Panels'
@@ -142,16 +143,14 @@ export function HistoryView(): ReactNode {
             </div>
             {tab === 'summary' && <SummaryBlock m={detail} />}
             {tab === 'transcript' && (
-              <div>
-                {detail.segments.filter((s) => s.status === 'ok').map((s) => (
-                  <div key={s.id} className="seg">
-                    <div className="time">{formatClock(s.startMs)}</div>
-                    <div className={`who ${s.source === 'mic' ? 'you' : 'remote'}`} title={s.speaker}>
-                      {s.speaker}
-                    </div>
-                    <div className="text">{s.text}</div>
-                  </div>
-                ))}
+              <div className="history-transcript">
+                {(() => {
+                  const ok = detail.segments.filter((s) => s.status === 'ok')
+                  const asked = new Map(
+                    detail.questions.filter((q) => q.status !== 'dismissed').map((q) => [q.segmentId, q.status === 'open' ? 'open' : 'answered'] as const)
+                  )
+                  return ok.map((s, i) => <SegmentRow key={s.id} seg={s} continued={continuesSpeaker(ok[i - 1], s)} question={asked.get(s.id)} />)
+                })()}
                 {!detail.segments.length && <div className="muted">No transcript.</div>}
               </div>
             )}
@@ -160,14 +159,16 @@ export function HistoryView(): ReactNode {
                 {detail.responses
                   .filter((r) => r.status === 'done')
                   .map((r) => (
-                    <div key={r.id} className="resp">
-                      <div className="resp-head">
-                        <span className="kind">{r.action === 'ask' && r.prompt ? `“${r.prompt}”` : ACTION_LABELS[r.action]}</span>
-                        <span className="spacer" />
-                        <span>{formatClock(r.at - detail.startedAt)}</span>
-                      </div>
-                      <Markdown text={r.text} />
-                    </div>
+                    <ResponseCard
+                      key={r.id}
+                      r={r}
+                      readOnly
+                      context={{
+                        question: r.questionId ? detail.questions.find((q) => q.id === r.questionId) : undefined,
+                        parentAction: r.parentId ? detail.responses.find((x) => x.id === r.parentId)?.action : undefined,
+                        timeLabel: formatClock(r.at - detail.startedAt)
+                      }}
+                    />
                   ))}
                 {!detail.responses.length && <div className="muted">No AI responses.</div>}
               </div>

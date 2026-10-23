@@ -89,7 +89,8 @@ export const settingsSchema = z.object({
       retentionDays: num(0, 3650, D.privacy.retentionDays),
       keepScreenshots: bool(D.privacy.keepScreenshots),
       consentReminder: bool(D.privacy.consentReminder),
-      hideFromCapture: bool(D.privacy.hideFromCapture)
+      hideFromCapture: bool(D.privacy.hideFromCapture),
+      meetingsDir: z.string().max(1024).catch('')
     })
     .catch(D.privacy),
   ui: z

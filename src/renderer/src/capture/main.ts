@@ -14,6 +14,7 @@ const audio = new AudioEngine({
   levels: (l) => bridge.send('capture:levels', l),
   channel: (m) => bridge.send('capture:channel', m),
   devices: (d) => bridge.send('capture:devices', d),
+  micTest: (m) => bridge.send('capture:mic-test', m),
   log
 })
 const grabber = new ScreenGrabber()

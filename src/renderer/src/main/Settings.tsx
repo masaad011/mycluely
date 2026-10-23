@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { DeepPartial, Settings } from '@shared/settings'
 import { DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from '@shared/settings'
 import { ACCENTS, FONTS, THEMES, type ThemeId, type ThemePreference } from '@shared/themes'
-import type { ModelInfo, ProviderId, ProviderTestResult, ShortcutAction } from '@shared/types'
+import type { MicTestStatus, ModelInfo, ProviderId, ProviderTestResult, ShortcutAction } from '@shared/types'
+import { deviceName, summarizeDevices } from '@shared/devices'
 import { MEETING_MODES, PROVIDER_IDS, PROVIDER_LABELS, RESPONSE_STYLES, SHORTCUT_LABELS } from '@shared/types'
 import { RECOMMENDED_TRANSCRIPTION_MODELS, visionOverrideKey } from '@shared/models'
 import { api } from '../lib/api'
@@ -667,30 +668,92 @@ function TranscriptionSection(): ReactNode {
 function AudioSection(): ReactNode {
   const settings = useStore((s) => s.settings)
   const devices = useStore((s) => s.devices) ?? []
+  const platform = useStore((s) => s.platform)
+  const session = useStore((s) => s.status?.session)
   if (!settings) return null
   const a = settings.audio
+  const win = platform === 'win32'
+  const sum = summarizeDevices(devices)
+  const known =
+    a.micDeviceId === 'default' ||
+    (a.micDeviceId === 'communications' && !!sum.communicationsInput) ||
+    sum.inputs.some((d) => d.deviceId === a.micDeviceId)
+  const otherOutput =
+    sum.communicationsOutput && sum.defaultOutput && sum.communicationsOutput !== sum.defaultOutput ? sum.communicationsOutput : undefined
   return (
     <div className="settings-section">
       <h2>Audio capture</h2>
-      <Field label="Microphone (You)" help="Your own voice. Use headphones so the microphone doesn't also pick up the other participants (duplicates are filtered, but headphones work best).">
+      <Field
+        label="Microphone (You)"
+        help={
+          <>
+            Your own voice. “{win ? 'Windows' : 'System'} default” follows whichever microphone {win ? 'Windows' : 'the system'} is set to use; pick a
+            specific one to always use it. Use headphones so the microphone doesn't also pick up the other participants (duplicates are filtered, but
+            headphones work best).
+          </>
+        }
+      >
         <Toggle checked={a.micEnabled} onChange={(v) => update({ audio: { micEnabled: v } })} label="Capture my microphone" />
-        <select value={a.micDeviceId} onChange={(e) => update({ audio: { micDeviceId: e.target.value } })} disabled={!a.micEnabled}>
-          <option value="default">System default microphone</option>
-          {devices
-            .filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications')
-            .map((d) => (
+        <label className="sub-label" htmlFor="mic-device">
+          Input device
+        </label>
+        <div className="device-row">
+          <select
+            id="mic-device"
+            data-testid="mic-device"
+            value={a.micDeviceId}
+            onChange={(e) => update({ audio: { micDeviceId: e.target.value } })}
+            disabled={!a.micEnabled}
+          >
+            <option value="default">
+              {win ? 'Windows' : 'System'} default{sum.defaultInput ? ` — ${sum.defaultInput}` : ''}
+            </option>
+            {sum.communicationsInput && <option value="communications">Windows communications device — {sum.communicationsInput}</option>}
+            {sum.inputs.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
-                {d.label}
+                {deviceName(d.label)}
               </option>
             ))}
-        </select>
-        {!devices.length && <div className="small muted">Device names appear after the first capture (Windows asks for microphone permission).</div>}
+            {!known && <option value={a.micDeviceId}>{devices.length ? 'Previously selected microphone (not connected)' : 'Saved microphone'}</option>}
+          </select>
+          <MicTest deviceId={a.micDeviceId} disabled={!a.micEnabled} busy={!!session && session !== 'idle'} />
+        </div>
+        {!known && devices.length > 0 && (
+          <div className="callout warn" data-testid="mic-missing">
+            The microphone selected earlier isn't connected, so meetings use the {win ? 'Windows' : 'system'} default instead. Plug it in, or choose
+            another microphone above.
+          </div>
+        )}
       </Field>
       <Field
         label="Meeting audio (Remote)"
-        help="Captures what plays through your PC speakers/headset — Teams, Zoom, Google Meet in the browser, etc. — using Windows loopback capture. It records all apps' audio, so mute other media during meetings."
+        help={
+          <>
+            Captures what plays through your {win ? 'Windows default playback device' : 'speakers'} — Teams, Zoom, Google Meet in the browser, etc. —
+            using {win ? 'Windows' : 'system'} loopback capture. It records all apps' audio, so mute other media during meetings.
+          </>
+        }
       >
         <Toggle checked={a.systemEnabled} onChange={(v) => update({ audio: { systemEnabled: v } })} label="Capture system audio" />
+        {win && (
+          <div className="small" data-testid="system-audio-device">
+            Records: <strong>{sum.defaultOutput ?? 'the Windows default playback device'}</strong>
+            {sum.defaultOutput && <span className="muted"> (Windows default playback device)</span>}
+          </div>
+        )}
+        {win && otherOutput && (
+          <div className="callout" data-testid="output-mismatch">
+            Windows uses <strong>{otherOutput}</strong> for calls. If your meeting app plays through it, MyCluely won't hear the other participants — make
+            it the default playback device in Windows sound settings, or choose <strong>{sum.defaultOutput}</strong> as the speaker in your meeting app.
+          </div>
+        )}
+        {win && (
+          <div>
+            <button className="btn sm" type="button" data-testid="open-sound-settings" onClick={() => void safe(() => api.invoke('system:open-sound-settings'))}>
+              <IconExternal /> Open Windows sound settings
+            </button>
+          </div>
+        )}
       </Field>
       <Field label="Speech sensitivity" help="Raise it if quiet speakers are missed; lower it if background noise gets transcribed.">
         <div className="row">
@@ -719,6 +782,81 @@ function AudioSection(): ReactNode {
         </select>
       </Field>
     </div>
+  )
+}
+
+/** Opens the chosen microphone on its own and shows its level, so you can check it hears you. */
+function MicTest({ deviceId, disabled, busy }: { deviceId: string; disabled: boolean; busy: boolean }): ReactNode {
+  const [on, setOn] = useState(false)
+  const [status, setStatus] = useState<MicTestStatus | null>(null)
+  const [heard, setHeard] = useState(false)
+  const [quiet, setQuiet] = useState(false)
+
+  useEffect(
+    () =>
+      api.on('mic-test', (m) => {
+        setStatus(m)
+        if (!m.active) setOn(false)
+        if (m.level > 0.25) setHeard(true)
+      }),
+    []
+  )
+  // Restart on another device; stop when switched off or leaving Settings.
+  useEffect(() => {
+    if (!on) return
+    setHeard(false)
+    setQuiet(false)
+    void safe(() => api.invoke('audio:test-mic', true, deviceId))
+    const t = setTimeout(() => setQuiet(true), 4000)
+    return () => {
+      clearTimeout(t)
+      void api.invoke('audio:test-mic', false).catch(() => undefined)
+    }
+  }, [on, deviceId])
+  useEffect(() => {
+    if (disabled || busy) setOn(false)
+  }, [disabled, busy])
+
+  const active = on && !!status?.active
+  const level = active ? status!.level : 0
+  const label = status?.label ?? 'the microphone'
+  return (
+    <>
+      <button
+        className="btn"
+        type="button"
+        data-testid="mic-test"
+        aria-pressed={on}
+        disabled={disabled || busy}
+        title={busy ? 'Stop the meeting to test the microphone' : 'Check that this microphone hears you'}
+        onClick={() => {
+          setStatus(null)
+          setOn(!on)
+        }}
+      >
+        {on ? 'Stop test' : 'Test'}
+      </button>
+      {(on || status?.error) && (
+        <div className="mic-test" role="status" data-testid="mic-test-status">
+          {on && (
+            <span className={`level-bar${level > 0.25 ? ' hot' : ''}`} aria-label={`Microphone level ${Math.round(level * 100)}%`} data-level={level.toFixed(2)}>
+              <i style={{ width: `${Math.round(level * 100)}%` }} />
+            </span>
+          )}
+          <span className="small muted">
+            {status?.error
+              ? status.error
+              : !active
+                ? 'Opening the microphone…'
+                : heard
+                  ? `Hearing you on ${label}.`
+                  : quiet
+                    ? `No sound from ${label} — check it isn't muted, or choose another microphone.`
+                    : `Say something — the bar should move (${label}).`}
+          </span>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -842,6 +980,18 @@ function PrivacySection(): ReactNode {
   const [confirm, setConfirm] = useState(false)
   if (!settings) return null
   const p = settings.privacy
+  const moveMeetings = async (target: 'choose' | 'default'): Promise<void> => {
+    const res = await safe(() => api.invoke('history:move-folder', target), 'Could not change the meetings folder')
+    if (!res) return
+    const left = res.left ? ` ${res.left} could not be moved and stayed in the old folder.` : ''
+    pushToast({
+      id: String(Date.now()),
+      level: res.left ? 'warning' : 'success',
+      message: `Meetings folder changed — moved ${res.moved} meeting${res.moved === 1 ? '' : 's'}.${left}`,
+      detail: res.dir,
+      at: Date.now()
+    })
+  }
   return (
     <div className="settings-section">
       <h2>Privacy & data</h2>
@@ -851,6 +1001,32 @@ function PrivacySection(): ReactNode {
       </div>
       <Field label="Meeting history" help="Save transcripts, AI responses and summaries locally so you can review and export them later.">
         <Toggle checked={p.saveHistory} onChange={(v) => update({ privacy: { saveHistory: v } })} label="Save meetings to history" />
+      </Field>
+      <Field
+        label="Meetings folder"
+        help="Saved meetings and the running meeting's temporary files. Changing the folder moves the saved meetings there."
+      >
+        <div className="row wrap">
+          <input
+            type="text"
+            className="grow"
+            readOnly
+            value={p.meetingsDir || 'Default (MyCluely app data folder)'}
+            aria-label="Meetings folder"
+            data-testid="meetings-folder"
+          />
+          <button className="btn" onClick={() => void moveMeetings('choose')}>
+            Change…
+          </button>
+          {p.meetingsDir && (
+            <button className="btn" onClick={() => void moveMeetings('default')}>
+              Use default
+            </button>
+          )}
+          <button className="btn" onClick={() => void safe(() => api.invoke('history:open-folder'))}>
+            Open
+          </button>
+        </div>
       </Field>
       <Field label="Keep history for">
         <select value={p.retentionDays} onChange={(e) => update({ privacy: { retentionDays: Number(e.target.value) } })}>

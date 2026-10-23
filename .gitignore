@@ -12,3 +12,6 @@ playwright-report/
 
 # scratch/shared images, not project code
 tmp/
+
+# saved meetings (Settings → Privacy & data → Meetings folder)
+meetings/

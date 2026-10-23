@@ -78,6 +78,9 @@ test('documentation screenshots', async () => {
     await expect(main.getByTestId('response').first()).toHaveAttribute('data-status', 'done')
     await main.getByTestId('action-suggest').click()
     await expect(main.getByTestId('response').first()).toHaveAttribute('data-status', 'done')
+    await main.getByTestId('ask-input').fill('Show me the code for evicting cache keys')
+    await main.getByTestId('ask-input').press('Enter')
+    await expect(main.getByTestId('response').first()).toHaveAttribute('data-status', 'done')
     // Auto answer mode, watching the slide window selected above (never the real desktop).
     await main.getByTestId('answer-mode').getByRole('radio', { name: 'Auto' }).click()
     await expect(main.getByTestId('auto-status')).toHaveAttribute('data-state', /nothing|watching/, { timeout: 30_000 })

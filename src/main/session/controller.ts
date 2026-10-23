@@ -5,6 +5,7 @@ import type { AppSnapshot, AudioCaptureConfig, AudioSegmentMessage, ChannelStatu
 import type { Settings } from '@shared/settings'
 import type {
   AudioDevice,
+  MicTestStatus,
   AudioLevels,
   CaptureSource,
   CaptureStatus,
@@ -42,8 +43,6 @@ export interface SessionDeps {
   screens: ScreenSourceProvider
   ocr: OcrEngine
   broadcaster: Broadcaster
-  /** Folder for screenshots that are not retained after the meeting. */
-  cacheDir: string
   platform?: NodeJS.Platform
   version?: string
   /** Theme in effect for UI windows. */
@@ -413,6 +412,17 @@ export class SessionController extends EventEmitter {
     this.deps.broadcaster.send('devices', devices)
   }
 
+  onMicTest(status: MicTestStatus): void {
+    this.deps.broadcaster.send('mic-test', status)
+  }
+
+  /** Settings → Audio capture → Test. A running meeting owns the microphone (and shows its level). */
+  testMic(on: boolean, deviceId = 'default'): void {
+    if (!on) return this.deps.capture.command({ type: 'mic-test-stop' })
+    if (this.status.session !== 'idle') throw new Error('Stop the meeting to test the microphone — the Live view shows its level meanwhile.')
+    this.deps.capture.command({ type: 'mic-test', deviceId })
+  }
+
   onAudioSegment(msg: AudioSegmentMessage): void {
     const live = this.live
     if (!live.started || this.status.session === 'idle') return
@@ -725,11 +735,11 @@ export class SessionController extends EventEmitter {
   }
 
   private screenshotDir(live: LiveMeeting): string {
-    return this.keepsScreenshots(live) ? this.deps.store.screensDir(live.id) : path.join(this.deps.cacheDir, live.id)
+    return this.keepsScreenshots(live) ? this.deps.store.screensDir(live.id) : path.join(this.deps.store.cacheDir, live.id)
   }
 
   private async discardScreenshots(live: LiveMeeting): Promise<void> {
-    await fs.rm(path.join(this.deps.cacheDir, live.id), { recursive: true, force: true }).catch(() => undefined)
+    await fs.rm(path.join(this.deps.store.cacheDir, live.id), { recursive: true, force: true }).catch(() => undefined)
     for (const s of live.record.snapshots) s.imagePath = undefined
   }
 

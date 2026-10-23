@@ -56,6 +56,25 @@ The team reviewed Q3 results and the caching layer.
 ## Open questions
 - None yet`
 
+/** An answer with code and a table (readability and syntax-highlighting checks, docs screenshots). */
+export const CODE_REPLY = [
+  'Publish a change event after each write and let the cache evict the affected key:',
+  '',
+  '```ts',
+  '// Evict cached rows when the database changes',
+  'export async function onChange(event: ChangeEvent): Promise<void> {',
+  '  const key = `user:${event.id}`',
+  '  await cache.del(key)',
+  "  metrics.increment('cache.evictions', 1)",
+  '}',
+  '```',
+  '',
+  '| Step | Typical latency |',
+  '|:--|--:|',
+  '| Publish event | ~5 ms |',
+  '| Evict key | ~1 ms |'
+].join('\n')
+
 export function defaultReply(prompt: string): string {
   if (/Summarize the meeting so far/.test(prompt)) return SUMMARY_MARKDOWN
   if (/running summary|Update the summary/i.test(prompt)) return '- Discussed caching and Q3 results.'
@@ -70,6 +89,7 @@ export function defaultReply(prompt: string): string {
     return 'Mock answer from the test server.'
   }
   if (/shown on the screen/.test(prompt) && quiz) return '**B) Hash table** — hashing gives O(1) average lookup by key.'
+  if (/The user asks: "Show me the code/.test(prompt)) return CODE_REPLY
   if (/Suggest exactly 3 questions/.test(prompt)) {
     return '- What is the cache TTL? (clarifies freshness)\n- Who owns the Postgres migration? (ownership)\n- What is the rollback plan? (risk)'
   }

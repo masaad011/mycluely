@@ -1,5 +1,5 @@
 import type { AudioCaptureConfig, AudioSegmentMessage, CaptureCommand, ChannelStatusMessage } from '@shared/ipc'
-import type { AudioDevice, AudioLevels, AudioSourceKind } from '@shared/types'
+import type { AudioDevice, AudioLevels, AudioSourceKind, MicTestStatus } from '@shared/types'
 import { Resampler } from '@shared/audio/resampler'
 import { VadSegmenter, type VadSegment } from '@shared/audio/vad'
 import { encodeWav } from '@shared/audio/wav'
@@ -7,12 +7,15 @@ import workletUrl from './pcm-worklet.ts?worker&url'
 
 const TARGET_RATE = 16000
 const MAX_RESTARTS = 3
+/** A forgotten microphone test switches itself off. */
+const MIC_TEST_MS = 30_000
 
 export interface AudioEngineEvents {
   segment(m: AudioSegmentMessage): void
   levels(l: AudioLevels): void
   channel(m: ChannelStatusMessage): void
   devices(d: AudioDevice[]): void
+  micTest(m: MicTestStatus): void
   log(level: 'info' | 'warn' | 'error', message: string): void
 }
 
@@ -28,6 +31,13 @@ interface Pipeline {
   label: string
   deviceId?: string
   stopping: boolean
+}
+
+interface MicTest {
+  ctx: AudioContext
+  stream: MediaStream
+  timer: number
+  stopTimer: number
 }
 
 /**
@@ -49,6 +59,7 @@ export class AudioEngine {
   private commands: Promise<void> = Promise.resolve()
   /** Bumped by start/stop; async work started under an older generation is discarded. */
   private generation = 0
+  private test: MicTest | null = null
 
   constructor(private readonly ev: AudioEngineEvents) {
     navigator.mediaDevices.addEventListener('devicechange', () => void this.onDeviceChange())
@@ -84,6 +95,11 @@ export class AudioEngine {
         return this.stop()
       case 'refresh-devices':
         await this.refreshDevices()
+        return
+      case 'mic-test':
+        return this.startMicTest(cmd.deviceId)
+      case 'mic-test-stop':
+        return this.stopMicTest()
     }
   }
 
@@ -102,6 +118,7 @@ export class AudioEngine {
   }
 
   async start(config: AudioCaptureConfig): Promise<void> {
+    await this.stopMicTest()
     await this.stop()
     const gen = this.generation
     this.config = config
@@ -157,27 +174,16 @@ export class AudioEngine {
   }
 
   private async startMic(gen: number): Promise<void> {
-    const c = this.config!
-    const wanted = c.micDeviceId && c.micDeviceId !== 'default' ? c.micDeviceId : undefined
-    const constraints = (deviceId?: string): MediaStreamConstraints => ({
-      audio: {
-        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
-      video: false
-    })
+    const wanted = wantedMic(this.config!.micDeviceId)
     let stream: MediaStream
     let note: string | undefined
     try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints(wanted))
+      stream = await navigator.mediaDevices.getUserMedia(micConstraints(wanted))
     } catch (err) {
       if (!wanted) return this.channelError('mic', `Microphone unavailable: ${describeMediaError(err)}`)
       note = 'Selected microphone not found — using the default microphone.'
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints())
+        stream = await navigator.mediaDevices.getUserMedia(micConstraints())
       } catch (err2) {
         return this.channelError('mic', `Microphone unavailable: ${describeMediaError(err2)}`)
       }
@@ -356,16 +362,82 @@ export class AudioEngine {
     }, 120)
   }
 
+  /**
+   * Settings → "Test": open the chosen microphone on its own (no transcription, nothing played
+   * back) and report its level so the user can see it hears them. Never runs during a meeting.
+   */
+  private async startMicTest(deviceId: string): Promise<void> {
+    await this.stopMicTest(false)
+    if (this.running) return this.ev.micTest({ active: false, level: 0, error: 'A meeting is running — its level meters show the microphone.' })
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(micConstraints(wantedMic(deviceId)))
+    } catch (err) {
+      return this.ev.micTest({ active: false, level: 0, error: `Can't open this microphone: ${describeMediaError(err)}` })
+    }
+    const ctx = new AudioContext()
+    if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
+    const source = ctx.createMediaStreamSource(stream)
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 2048
+    const mute = ctx.createGain()
+    mute.gain.value = 0
+    source.connect(analyser)
+    analyser.connect(mute)
+    mute.connect(ctx.destination)
+    const track = stream.getAudioTracks()[0]
+    const label = track?.label || 'Microphone'
+    const buf = new Float32Array(analyser.fftSize)
+    let level = 0
+    const test: MicTest = {
+      ctx,
+      stream,
+      timer: window.setInterval(() => {
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (const v of buf) sum += v * v
+        const db = 20 * Math.log10(Math.sqrt(sum / buf.length) + 1e-9)
+        // Same scale and ballistics as the live meters (-70..-10 dBFS, fast attack, slow release).
+        const lvl = Math.min(1, Math.max(0, (db + 70) / 60))
+        level = lvl > level ? lvl : level * 0.85 + lvl * 0.15
+        this.ev.micTest({ active: true, level, label })
+      }, 100),
+      stopTimer: window.setTimeout(() => void this.enqueue(() => this.stopMicTest(), 'mic-test timeout'), MIC_TEST_MS)
+    }
+    track?.addEventListener('ended', () => {
+      if (this.test === test) void this.enqueue(() => this.stopMicTest(true, `${label} disconnected.`), 'mic-test ended')
+    })
+    this.test = test
+    this.ev.log('info', `mic test: opened "${label}"`)
+    this.ev.micTest({ active: true, level: 0, label })
+  }
+
+  private async stopMicTest(report = true, error?: string): Promise<void> {
+    const t = this.test
+    if (!t) return
+    this.test = null
+    clearInterval(t.timer)
+    clearTimeout(t.stopTimer)
+    stopStream(t.stream)
+    await t.ctx.close().catch(() => undefined)
+    if (report) this.ev.micTest({ active: false, level: 0, error })
+  }
+
   async refreshDevices(): Promise<AudioDevice[]> {
     try {
       const all = await navigator.mediaDevices.enumerateDevices()
       this.devices = all
-        .filter((d) => d.kind === 'audioinput')
-        .map((d) => ({
-          deviceId: d.deviceId,
-          label: d.label || (d.deviceId === 'default' ? 'Default microphone' : 'Microphone'),
-          isDefault: d.deviceId === 'default'
-        }))
+        .filter((d) => d.kind === 'audioinput' || d.kind === 'audiooutput')
+        .map((d) => {
+          const kind = d.kind === 'audioinput' ? 'input' : 'output'
+          const fallback = kind === 'input' ? 'Microphone' : 'Speakers'
+          return {
+            deviceId: d.deviceId,
+            label: d.label || (d.deviceId === 'default' ? `Default ${fallback.toLowerCase()}` : fallback),
+            isDefault: d.deviceId === 'default',
+            kind
+          }
+        })
       this.ev.devices(this.devices)
     } catch (err) {
       this.ev.log('warn', `enumerateDevices failed: ${String(err)}`)
@@ -378,9 +450,27 @@ export class AudioEngine {
     const mic = this.pipelines.mic
     if (!mic || !this.running) return
     // If the device in use vanished, the track normally ends; handle drivers that don't end it.
-    if (mic.deviceId && mic.deviceId !== 'default' && !devices.some((d) => d.deviceId === mic.deviceId)) {
+    if (mic.deviceId && mic.deviceId !== 'default' && !devices.some((d) => d.kind === 'input' && d.deviceId === mic.deviceId)) {
       void this.onTrackEnded(mic)
     }
+  }
+}
+
+/** 'default' (or nothing) lets the OS choose; anything else must be that exact device. */
+function wantedMic(deviceId: string | undefined): string | undefined {
+  return deviceId && deviceId !== 'default' ? deviceId : undefined
+}
+
+function micConstraints(deviceId?: string): MediaStreamConstraints {
+  return {
+    audio: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    },
+    video: false
   }
 }
 

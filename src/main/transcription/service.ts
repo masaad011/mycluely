@@ -40,16 +40,17 @@ type Resolved = { engine: 'openai' | 'gemini' | 'local' | 'none'; model: string 
 function describeFailure(
   engine: Resolved['engine'],
   err: unknown
-): { message: string; retryable: boolean; retryAfterMs?: number } {
+): { message: string; retryable: boolean; retryAfterMs?: number; timeout?: boolean } {
   if (engine === 'local' || engine === 'none') {
     const msg = err instanceof Error ? err.message : String(err)
     return { message: `On-device Whisper: ${msg}`, retryable: /network|fetch|timed? ?out|busy/i.test(msg) }
   }
   const e = normalizeError(engine, err)
-  return { message: e.userMessage, retryable: e.retryable, retryAfterMs: e.retryAfterMs }
+  return { message: e.userMessage, retryable: e.retryable, retryAfterMs: e.retryAfterMs, timeout: e.kind === 'timeout' }
 }
 
 const MAX_ATTEMPTS = 3
+const TIMEOUT_ATTEMPTS_AUTO = 2
 const CONCURRENCY = 2
 const MERGE_BACKLOG = 6
 const MERGE_MAX_MS = 28_000
@@ -195,12 +196,27 @@ export class TranscriptionService {
           this.onNotice(`${message} Switching transcription to on-device Whisper.`)
           continue
         }
-        if (e.retryable && attempt < MAX_ATTEMPTS) {
+        const auto = this.settings().transcription.engine === 'auto' && resolved.engine !== 'local'
+        // Each timed-out attempt already took 45 s or more; in Auto mode, fall back sooner.
+        const attempts = auto && e.timeout ? TIMEOUT_ATTEMPTS_AUTO : MAX_ATTEMPTS
+        if (e.retryable && attempt < attempts) {
           this.lastError = message
           void this.publish()
           await sleep(e.retryAfterMs ?? 1500 * 2 ** (attempt - 1), signal).catch(() => undefined)
           if (signal.aborted) return { job, error: 'cancelled' }
           continue
+        }
+        // Auto mode: the cloud engine is temporarily failing (timeouts, 503s). Transcribe this part
+        // on-device instead of losing it — audio is not kept, so it cannot be retried later.
+        if (auto && e.retryable) {
+          try {
+            const result = await this.run({ engine: 'local', model: this.settings().transcription.localModel }, job, signal)
+            this.lastError = undefined
+            void this.publish()
+            return { job, result }
+          } catch {
+            if (signal.aborted) return { job, error: 'cancelled' }
+          }
         }
         this.lastError = message
         void this.publish()

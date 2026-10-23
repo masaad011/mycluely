@@ -51,8 +51,8 @@ let quitting = false
 async function bootstrap(): Promise<void> {
   keepConnectionsAlive()
   const userData = app.getPath('userData')
-  const cacheDir = path.join(userData, 'session-cache')
-  await fs.rm(cacheDir, { recursive: true, force: true }).catch(() => undefined)
+  // Older versions kept the live meeting's temporary screenshots here.
+  await fs.rm(path.join(userData, 'session-cache'), { recursive: true, force: true }).catch(() => undefined)
 
   const settings = await SettingsStore.open(userData)
   const credentials = new CredentialStore(userData, encryptor)
@@ -81,7 +81,9 @@ async function bootstrap(): Promise<void> {
     ...(await credentials.status()),
     chatgpt: chatgpt.credentialStatus()
   })
-  const store = new MeetingStore(path.join(userData, 'meetings'))
+  const defaultMeetingsDir = path.join(userData, 'meetings')
+  const store = new MeetingStore(settings.get().privacy.meetingsDir || defaultMeetingsDir)
+  await fs.rm(store.cacheDir, { recursive: true, force: true }).catch(() => undefined)
   const ocr = new OcrService({ langPath: tessdataPath(), cachePath: path.join(userData, 'ocr-cache') })
 
   handleAppScheme(path.join(__dirname, '../renderer'))
@@ -100,6 +102,7 @@ async function bootstrap(): Promise<void> {
     levels: (l) => controller.onLevels(l),
     channel: (m) => controller.onChannel(m),
     devices: (d) => controller.onDevices(d),
+    micTest: (m) => controller.onMicTest(m),
     sttProgress: (p) => {
       const detail =
         p.status === 'loading'
@@ -125,7 +128,6 @@ async function bootstrap(): Promise<void> {
     screens: new ElectronScreenSources(windows),
     ocr,
     broadcaster: windows,
-    cacheDir,
     platform: process.platform,
     version: app.getVersion(),
     theme: () => windows.themeState(),
@@ -172,6 +174,7 @@ async function bootstrap(): Promise<void> {
     credentialStatus,
     registry,
     store,
+    defaultMeetingsDir,
     session: controller,
     writeClipboard: process.env['MYCLUELY_TEST_HOOKS'] === '1' ? (text) => void testClipboard.push(text) : undefined
   })

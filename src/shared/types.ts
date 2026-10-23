@@ -284,6 +284,17 @@ export interface AudioDevice {
   deviceId: string
   label: string
   isDefault: boolean
+  /** Microphone, or playback device (system audio records the default playback device). */
+  kind: 'input' | 'output'
+}
+
+/** Microphone test in Settings → Audio capture (level 0..1, same scale as the live meters). */
+export interface MicTestStatus {
+  active: boolean
+  level: number
+  /** Device actually opened. */
+  label?: string
+  error?: string
 }
 
 export interface Toast {

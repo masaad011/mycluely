@@ -23,6 +23,8 @@ export interface IpcContext {
   credentialStatus: () => Promise<Record<ProviderId, CredentialStatus>>
   registry: ProviderRegistry
   store: MeetingStore
+  /** Meetings folder used when Settings → Privacy & data has none chosen. */
+  defaultMeetingsDir: string
   session: SessionController
   /** Clipboard writer; tests substitute one so they never touch the real clipboard. */
   writeClipboard?: (text: string) => void
@@ -43,7 +45,7 @@ function assertString(v: unknown, max = 10_000): asserts v is string {
 
 /** Registers all UI → main calls. Every call is checked to come from one of our UI windows. */
 export function registerIpc(ctx: IpcContext): void {
-  const { windows, settings, credentials, registry, store, session, chatgpt, credentialStatus } = ctx
+  const { windows, settings, credentials, registry, store, defaultMeetingsDir, session, chatgpt, credentialStatus } = ctx
   const writeClipboard = ctx.writeClipboard ?? ((text: string) => clipboard.writeText(text))
 
   const handle = <K extends InvokeChannel>(channel: K, fn: Handler<K>): void => {
@@ -57,9 +59,16 @@ export function registerIpc(ctx: IpcContext): void {
   handle('settings:get', () => settings.get())
   handle('settings:update', (patch) => {
     if (!patch || typeof patch !== 'object') throw new Error('Invalid settings')
-    return settings.update(patch as DeepPartial<Settings>)
+    // The meetings folder changes only with history:move-folder, which moves the meetings too.
+    const p = patch as DeepPartial<Settings>
+    if (p.privacy && 'meetingsDir' in p.privacy) delete p.privacy.meetingsDir
+    return settings.update(p)
   })
-  handle('settings:reset', () => settings.reset())
+  handle('settings:reset', async () => {
+    const meetingsDir = settings.get().privacy.meetingsDir
+    await settings.reset()
+    return meetingsDir ? settings.update({ privacy: { meetingsDir } }) : settings.get()
+  })
 
   const credentialsChanged = async (provider: ProviderId): Promise<Record<ProviderId, CredentialStatus>> => {
     registry.reset(provider)
@@ -191,6 +200,30 @@ export function registerIpc(ctx: IpcContext): void {
     return res.filePath
   })
 
+  handle('history:move-folder', async (target) => {
+    if (session.getStatus().session !== 'idle') throw new Error('Stop the meeting before changing the meetings folder.')
+    let dir = defaultMeetingsDir
+    if (target === 'choose') {
+      const owner = windows.main ?? undefined
+      const opts = {
+        title: 'Folder for saved meetings',
+        defaultPath: store.root,
+        properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
+      }
+      const res = owner ? await dialog.showOpenDialog(owner, opts) : await dialog.showOpenDialog(opts)
+      if (res.canceled || !res.filePaths[0]) return null
+      dir = res.filePaths[0]
+    } else if (target !== 'default') throw new Error('Invalid folder')
+    const result = await store.relocate(dir)
+    await settings.update({ privacy: { meetingsDir: target === 'default' ? '' : store.root } })
+    return { dir: store.root, ...result }
+  })
+  handle('history:open-folder', async () => {
+    await fs.mkdir(store.root, { recursive: true })
+    const err = await shell.openPath(store.root)
+    if (err) throw new Error(err)
+  })
+
   handle('window:toggle-overlay', () => windows.toggleOverlay())
   handle('window:show-main', (view) => windows.showMain(view))
   handle('window:hide-overlay', () => windows.hideOverlay())
@@ -211,5 +244,13 @@ export function registerIpc(ctx: IpcContext): void {
     assertString(url, 2000)
     if (!/^https:\/\//i.test(url)) throw new Error('Only https links can be opened')
     await shell.openExternal(url)
+  })
+  handle('audio:test-mic', (on, deviceId) => {
+    if (on) assertString(deviceId, 512)
+    session.testMic(!!on, deviceId)
+  })
+  handle('system:open-sound-settings', async () => {
+    if (process.platform === 'win32') await shell.openExternal('ms-settings:sound')
+    else if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.Sound-Settings.extension')
   })
 }
